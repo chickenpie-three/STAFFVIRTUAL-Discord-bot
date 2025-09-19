@@ -1,11 +1,11 @@
 # Discord Bot Configuration
-DISCORD_BOT_TOKEN=MTQxODUyODIwMDI2NjM1MDY0Mw.GUWInb.xyH6wjYbPAuvHORu5vXubeddH4p0QfkAJaP_6g
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
 
 # AI Model API Keys (choose one or more based on your preference)
 # Note: Based on your preferences, we'll use Gemini 2.5 Nano Banana for image generation
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
-GEMINI_API_KEY=AIzaSyDJQxeOcaRbhBHBiUGEI517qaOK0WdKsdg
+GEMINI_API_KEY=your_gemini_api_key_here
 MISTRAL_API_KEY=your_mistral_api_key_here
 HUGGINGFACE_API_KEY=your_huggingface_api_key_here
 GROQ_API_KEY=your_groq_api_key_here

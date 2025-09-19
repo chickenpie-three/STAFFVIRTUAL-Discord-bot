@@ -48,7 +48,7 @@ class SVDiscordBot(commands.Bot):
         super().__init__(
             command_prefix='!sv ',
             intents=intents,
-            description='SV Brand Assistant Bot - Your AI-powered creative companion with AutoAgent'
+            description='SV Brand Assistant Bot - Your AI-powered creative companion with 12 specialized agents'
         )
         
         # Initialize brand configuration with safe color parsing
@@ -73,18 +73,15 @@ class SVDiscordBot(commands.Bot):
             'voice_tone': 'Professional yet approachable, confident, and creative'
         }
         
-        # Initialize AutoAgent instances for different specializations
+        # Initialize AI agents and knowledge manager
         self.agents = self._initialize_agents()
-        
-        # Initialize knowledge manager
         self.knowledge_manager = KnowledgeManager()
     
     def _initialize_agents(self):
         """Initialize AI agents with direct API integrations"""
-        # Initialize AI clients
         ai_clients = {}
         
-        # Initialize Gemini if API key is available and library is installed
+        # Initialize Gemini if available
         gemini_key = os.getenv('GEMINI_API_KEY')
         if gemini_key and genai:
             try:
@@ -94,7 +91,7 @@ class SVDiscordBot(commands.Bot):
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini: {e}")
         
-        # Initialize OpenAI if API key is available and library is installed
+        # Initialize OpenAI if available
         openai_key = os.getenv('OPENAI_API_KEY')
         if openai_key and openai:
             try:
@@ -103,7 +100,7 @@ class SVDiscordBot(commands.Bot):
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI: {e}")
         
-        # Initialize Anthropic if API key is available and library is installed
+        # Initialize Anthropic if available
         anthropic_key = os.getenv('ANTHROPIC_API_KEY')
         if anthropic_key and anthropic:
             try:
@@ -112,7 +109,7 @@ class SVDiscordBot(commands.Bot):
             except Exception as e:
                 logger.error(f"Failed to initialize Anthropic: {e}")
         
-        # Brand context that will be injected into all agents
+        # Brand context for all agents
         brand_context = f"""
         You are an AI assistant for {self.brand_config['name']}, a creative brand.
         
@@ -123,113 +120,55 @@ class SVDiscordBot(commands.Bot):
         - Focus on high-quality, professional results
         """
         
-        # Return the AI clients and brand context for use in commands
         return {
             'clients': ai_clients,
             'brand_context': brand_context,
             'image_prompt': brand_context + """
-            You are an expert image generation specialist. Your role is to:
-            1. Create compelling, branded visual content
-            2. Ensure all images align with brand guidelines
-            3. Provide detailed, creative prompts that capture the brand essence
-            4. Consider composition, color theory, and visual hierarchy
-            
-            Always ask clarifying questions if the request is ambiguous.
+            You are an expert image generation specialist. Create detailed, branded visual concepts and prompts.
             """,
             'document_prompt': brand_context + """
-            You are a professional document creation specialist. Your role is to:
-            1. Create well-structured, branded documents
-            2. Ensure consistent formatting and style
-            3. Use appropriate templates and layouts
-            4. Maintain brand voice throughout all content
-            5. Optimize for readability and professional presentation
-            
-            Support various document types: proposals, reports, presentations, marketing materials.
+            You are a professional document creation specialist. Create well-structured, branded documents.
             """,
             'brand_prompt': brand_context + """
-            You are a senior brand strategist and consultant. Your role is to:
-            1. Provide strategic brand guidance and recommendations
-            2. Ensure brand consistency across all touchpoints
-            3. Offer creative direction and feedback
-            4. Help with brand positioning and messaging
-            5. Analyze brand alignment and suggest improvements
-            
-            Always consider the broader brand strategy when providing advice.
+            You are a senior brand strategist. Provide strategic brand guidance and recommendations.
             """,
             'video_prompt': brand_context + """
-            You are a video content creation specialist. Your role is to:
-            1. Develop video concepts and scripts
-            2. Provide direction for branded video content
-            3. Ensure visual consistency with brand guidelines
-            4. Optimize content for different platforms and audiences
-            5. Create engaging, professional video narratives
-            
-            Focus on storytelling that aligns with brand values.
+            You are a video content specialist. Develop compelling video concepts and strategies.
             """,
             'blog_prompt': brand_context + """
-            You are a professional blog writer and content strategist. Your role is to:
-            1. Create engaging, SEO-optimized blog posts
-            2. Maintain brand voice and messaging consistency
-            3. Structure content for readability and engagement
-            4. Include relevant keywords and calls-to-action
-            5. Optimize for search engines and social sharing
-            
-            Focus on creating valuable, informative content that establishes thought leadership.
+            You are a professional blog writer. Create engaging, SEO-optimized content.
             """,
             'social_prompt': brand_context + """
-            You are a social media content specialist. Your role is to:
-            1. Create platform-specific social media posts
-            2. Optimize content for each platform's best practices
-            3. Include relevant hashtags and engagement hooks
-            4. Maintain consistent brand voice across platforms
-            5. Create content that drives engagement and conversions
-            
-            Consider platform differences: LinkedIn (professional), Instagram (visual), Twitter (concise), etc.
+            You are a social media specialist. Create platform-specific, engaging content.
             """,
             'calendar_prompt': brand_context + """
-            You are a social media strategist and calendar planner. Your role is to:
-            1. Create comprehensive social media content calendars
-            2. Plan content themes and campaigns
-            3. Balance promotional and educational content
-            4. Consider seasonal trends and industry events
-            5. Optimize posting schedules for maximum engagement
-            
-            Focus on strategic planning that supports business goals and audience engagement.
+            You are a social media strategist. Plan comprehensive content calendars.
             """,
             'knowledge_prompt': brand_context + """
-            You are a business intelligence assistant with deep knowledge about STAFFVIRTUAL. Your role is to:
-            1. Answer questions about company services, processes, and policies
-            2. Provide accurate information about business operations
-            3. Help with internal knowledge and decision-making
-            4. Maintain confidentiality and professional standards
-            5. Direct users to appropriate resources when needed
-            
-            Always provide accurate, helpful information based on available company knowledge.
+            You are a business intelligence assistant with deep STAFFVIRTUAL knowledge.
             """
         }
     
     async def _get_ai_response(self, prompt, agent_type='brand', use_knowledge=True):
-        """Get AI response using available clients with knowledge base context"""
+        """Get AI response using available clients"""
         try:
-            # Get relevant context from knowledge base
+            # Get knowledge base context
             knowledge_context = ""
             if use_knowledge:
                 knowledge_context = self.knowledge_manager.get_context_for_query(prompt)
                 if knowledge_context and knowledge_context != "No specific information found in knowledge base.":
-                    knowledge_context = f"\n\nRelevant Knowledge Base Information:\n{knowledge_context}\n"
+                    knowledge_context = f"\n\nRelevant Knowledge: {knowledge_context}\n"
             
-            # Try Gemini first (preferred based on user preferences)
+            # Try Gemini first
             if 'gemini' in self.agents['clients']:
                 system_prompt = self.agents[f'{agent_type}_prompt']
                 full_prompt = f"{system_prompt}{knowledge_context}\n\nUser Request: {prompt}"
-                
                 response = self.agents['clients']['gemini'].generate_content(full_prompt)
                 return response.text
             
             # Fallback to OpenAI
             elif 'openai' in self.agents['clients']:
                 system_prompt = self.agents[f'{agent_type}_prompt']
-                
                 response = self.agents['clients']['openai'].chat.completions.create(
                     model="gpt-4",
                     messages=[
@@ -242,7 +181,6 @@ class SVDiscordBot(commands.Bot):
             # Fallback to Anthropic
             elif 'anthropic' in self.agents['clients']:
                 system_prompt = self.agents[f'{agent_type}_prompt']
-                
                 response = self.agents['clients']['anthropic'].messages.create(
                     model="claude-3-sonnet-20240229",
                     max_tokens=2000,
@@ -252,7 +190,7 @@ class SVDiscordBot(commands.Bot):
                 return response.content[0].text
             
             else:
-                return "❌ No AI service configured. Please add API keys to your .env file."
+                return "❌ No AI service configured. Please add API keys to environment variables."
                 
         except Exception as e:
             logger.error(f"AI response error: {e}")
@@ -260,9 +198,7 @@ class SVDiscordBot(commands.Bot):
         
     async def setup_hook(self):
         """Called when the bot is starting up"""
-        logger.info("Setting up SV Discord Bot...")
-        
-        # Sync slash commands
+        logger.info("Setting up STAFFVIRTUAL Discord Bot...")
         try:
             synced = await self.tree.sync()
             logger.info(f"Synced {len(synced)} command(s)")
@@ -273,8 +209,6 @@ class SVDiscordBot(commands.Bot):
         """Called when the bot is ready"""
         logger.info(f'{self.user} has connected to Discord!')
         logger.info(f'Bot is in {len(self.guilds)} guilds')
-        
-        # Set bot status
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
@@ -285,15 +219,395 @@ class SVDiscordBot(commands.Bot):
 # Create bot instance
 bot = SVDiscordBot()
 
-# Add a simple test command
-@bot.tree.command(name="test", description="Test if the bot is working")
-async def test_command(interaction: discord.Interaction):
-    """Simple test command"""
+# 🎨 IMAGE GENERATION AGENT
+@bot.tree.command(name="image", description="Generate branded image concepts and prompts")
+async def generate_image(interaction: discord.Interaction, prompt: str, style: str = "professional"):
+    """Generate branded image concepts"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        enhanced_prompt = f"Create a detailed image concept for STAFFVIRTUAL: {prompt}. Style: {style}. Include composition, colors, and brand alignment."
+        result = await bot._get_ai_response(enhanced_prompt, 'image')
+        
+        embed = discord.Embed(
+            title="🎨 Image Concept Generated!",
+            description=f"**Prompt:** {prompt}\n**Style:** {style}",
+            color=bot.brand_config['primary_color']
+        )
+        embed.add_field(name="🖼️ Concept", value=result[:1024], inline=False)
+        embed.add_field(name="💡 Next Steps", value="Use this concept with DALL-E, Midjourney, or other image generation tools", inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 📄 DOCUMENT CREATION AGENT
+@bot.tree.command(name="document", description="Create branded documents")
+async def create_document(interaction: discord.Interaction, document_type: str, topic: str, length: str = "medium"):
+    """Create branded documents"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        doc_prompt = f"Create a {length} {document_type} for STAFFVIRTUAL about: {topic}. Include proper structure, brand voice, and professional formatting."
+        result = await bot._get_ai_response(doc_prompt, 'document')
+        
+        embed = discord.Embed(
+            title="📄 Document Created!",
+            description=f"**Type:** {document_type}\n**Topic:** {topic}\n**Length:** {length}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create file
+        document_content = f"# {document_type.title()}: {topic}\n\n{result}"
+        file_buffer = io.BytesIO(document_content.encode('utf-8'))
+        file = discord.File(file_buffer, filename=f"{document_type}_{topic.replace(' ', '_')}.txt")
+        
+        embed.add_field(name="📋 Preview", value=result[:500] + "..." if len(result) > 500 else result, inline=False)
+        
+        await interaction.followup.send(embed=embed, file=file)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🏢 BRAND STRATEGY AGENT
+@bot.tree.command(name="brand", description="Get strategic brand guidance")
+async def brand_guidance(interaction: discord.Interaction, query: str):
+    """Get brand strategy guidance"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        brand_prompt = f"As a brand strategist for STAFFVIRTUAL, provide guidance on: {query}. Include strategic recommendations and practical implementation."
+        result = await bot._get_ai_response(brand_prompt, 'brand')
+        
+        embed = discord.Embed(
+            title="🏢 Brand Strategic Guidance",
+            description=f"**Query:** {query}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        if len(result) > 1024:
+            chunks = [result[i:i+1024] for i in range(0, len(result), 1024)]
+            for i, chunk in enumerate(chunks[:3]):
+                field_name = "📋 Guidance" if i == 0 else f"📋 Continued ({i+1})"
+                embed.add_field(name=field_name, value=chunk, inline=False)
+        else:
+            embed.add_field(name="📋 Brand Guidance", value=result, inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🎬 VIDEO STRATEGY AGENT
+@bot.tree.command(name="video", description="Generate video content strategies")
+async def generate_video(interaction: discord.Interaction, prompt: str, duration: int = 30, style: str = "professional"):
+    """Generate video content strategies"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        video_prompt = f"Create a video content strategy for STAFFVIRTUAL: {prompt}. Duration: {duration}s. Style: {style}. Include script outline, visual direction, and brand integration."
+        result = await bot._get_ai_response(video_prompt, 'video')
+        
+        embed = discord.Embed(
+            title="🎬 Video Strategy Created!",
+            description=f"**Concept:** {prompt}\n**Duration:** {duration}s\n**Style:** {style}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        if len(result) > 1024:
+            chunks = [result[i:i+1024] for i in range(0, len(result), 1024)]
+            for i, chunk in enumerate(chunks[:2]):
+                field_name = "🎯 Strategy" if i == 0 else f"🎯 Continued"
+                embed.add_field(name=field_name, value=chunk, inline=False)
+        else:
+            embed.add_field(name="🎯 Video Strategy", value=result, inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 📝 BLOG WRITING AGENT
+@bot.tree.command(name="blog", description="Create SEO-optimized blog posts")
+async def create_blog(interaction: discord.Interaction, topic: str, keywords: str = "", length: str = "medium"):
+    """Create blog posts"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        blog_prompt = f"Write a {length} blog post for STAFFVIRTUAL about: {topic}. Keywords: {keywords}. Include SEO optimization, engaging structure, and call-to-action."
+        result = await bot._get_ai_response(blog_prompt, 'blog')
+        
+        embed = discord.Embed(
+            title="📝 Blog Post Created!",
+            description=f"**Topic:** {topic}\n**Keywords:** {keywords or 'General'}\n**Length:** {length}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create file
+        blog_content = f"# {topic}\n\n{result}"
+        file_buffer = io.BytesIO(blog_content.encode('utf-8'))
+        file = discord.File(file_buffer, filename=f"blog_{topic.replace(' ', '_')}.md")
+        
+        preview = result[:800] + "..." if len(result) > 800 else result
+        embed.add_field(name="📋 Preview", value=preview, inline=False)
+        
+        await interaction.followup.send(embed=embed, file=file)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 📱 SOCIAL MEDIA AGENT
+@bot.tree.command(name="social", description="Create platform-specific social media posts")
+async def create_social(interaction: discord.Interaction, platform: str, topic: str, hashtags: str = ""):
+    """Create social media posts"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        social_prompt = f"Create a {platform} post for STAFFVIRTUAL about: {topic}. Include platform-specific optimization, engagement hooks, and hashtags: {hashtags}."
+        result = await bot._get_ai_response(social_prompt, 'social')
+        
+        embed = discord.Embed(
+            title="📱 Social Media Post Created!",
+            description=f"**Platform:** {platform.title()}\n**Topic:** {topic}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        embed.add_field(name=f"📝 {platform.title()} Post", value=result, inline=False)
+        if hashtags:
+            embed.add_field(name="🏷️ Hashtags", value=hashtags, inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 📅 CONTENT CALENDAR AGENT
+@bot.tree.command(name="calendar", description="Generate social media content calendars")
+async def create_calendar(interaction: discord.Interaction, duration: str = "1 month", focus: str = "general"):
+    """Create content calendars"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        calendar_prompt = f"Create a social media content calendar for STAFFVIRTUAL. Duration: {duration}. Focus: {focus}. Include posting schedule, content themes, and platform strategies."
+        result = await bot._get_ai_response(calendar_prompt, 'calendar')
+        
+        embed = discord.Embed(
+            title="📅 Content Calendar Created!",
+            description=f"**Duration:** {duration}\n**Focus:** {focus}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create file
+        calendar_content = f"# STAFFVIRTUAL Content Calendar - {duration}\n## Focus: {focus}\n\n{result}"
+        file_buffer = io.BytesIO(calendar_content.encode('utf-8'))
+        file = discord.File(file_buffer, filename=f"content_calendar_{duration.replace(' ', '_')}.md")
+        
+        preview = result[:800] + "..." if len(result) > 800 else result
+        embed.add_field(name="📋 Calendar Preview", value=preview, inline=False)
+        
+        await interaction.followup.send(embed=embed, file=file)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🤔 BUSINESS Q&A AGENT
+@bot.tree.command(name="ask", description="Ask questions about STAFFVIRTUAL business")
+async def ask_business(interaction: discord.Interaction, question: str):
+    """Ask business questions"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        knowledge_prompt = f"Answer this question about STAFFVIRTUAL: {question}. Use available company knowledge and provide practical, actionable guidance."
+        result = await bot._get_ai_response(knowledge_prompt, 'knowledge')
+        
+        embed = discord.Embed(
+            title="🤔 Business Question Answered",
+            description=f"**Question:** {question}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        if len(result) > 1024:
+            chunks = [result[i:i+1024] for i in range(0, len(result), 1024)]
+            for i, chunk in enumerate(chunks[:3]):
+                field_name = "💡 Answer" if i == 0 else f"💡 Continued ({i+1})"
+                embed.add_field(name=field_name, value=chunk, inline=False)
+        else:
+            embed.add_field(name="💡 Answer", value=result, inline=False)
+        
+        embed.set_footer(text="💡 For specific policies, consult internal documentation")
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🌐 URL LEARNING AGENT
+@bot.tree.command(name="learn_url", description="Learn from website content")
+async def learn_from_url(interaction: discord.Interaction, url: str):
+    """Learn from URLs"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        content = await bot.knowledge_manager.scrape_url(url)
+        
+        if content:
+            bot.knowledge_manager.save_knowledge_base()
+            
+            embed = discord.Embed(
+                title="🌐 Website Content Learned!",
+                description=f"**URL:** {url}",
+                color=bot.brand_config['primary_color']
+            )
+            
+            embed.add_field(name="📄 Page Title", value=content.get('title', 'No title')[:1024], inline=False)
+            embed.add_field(
+                name="📊 Content Stats",
+                value=f"Paragraphs: {len(content.get('paragraphs', []))}\nContent learned and available for all AI agents",
+                inline=False
+            )
+            
+        else:
+            embed = discord.Embed(
+                title="❌ Failed to Learn from URL",
+                description=f"Could not scrape content from: {url}",
+                color=0xff0000
+            )
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 📄 DOCUMENT UPLOAD AGENT
+@bot.tree.command(name="upload_doc", description="Upload documents for the bot to learn from")
+async def upload_document(interaction: discord.Interaction, document: discord.Attachment):
+    """Upload and process documents"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        filename = document.filename.lower()
+        if not (filename.endswith('.pdf') or filename.endswith('.docx') or filename.endswith('.doc')):
+            embed = discord.Embed(
+                title="❌ Unsupported File Type",
+                description="Please upload PDF or Word documents only.",
+                color=0xff0000
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        file_content = await document.read()
+        
+        if filename.endswith('.pdf'):
+            doc_info = bot.knowledge_manager.process_pdf_document(file_content, document.filename)
+        else:
+            doc_info = bot.knowledge_manager.process_docx_document(file_content, document.filename)
+        
+        if doc_info:
+            bot.knowledge_manager.save_knowledge_base()
+            
+            embed = discord.Embed(
+                title="📄 Document Processed!",
+                description=f"**Filename:** {document.filename}",
+                color=bot.brand_config['primary_color']
+            )
+            
+            embed.add_field(
+                name="📊 Document Stats",
+                value=f"Type: {doc_info.get('type', 'Unknown').upper()}\nSize: {len(file_content)} bytes\nContent processed and available for all AI agents",
+                inline=False
+            )
+            
+            content_preview = doc_info.get('content', '')[:300] + "..." if len(doc_info.get('content', '')) > 300 else doc_info.get('content', '')
+            if content_preview:
+                embed.add_field(name="📝 Content Preview", value=content_preview, inline=False)
+            
+        else:
+            embed = discord.Embed(
+                title="❌ Document Processing Failed",
+                description=f"Could not process: {document.filename}",
+                color=0xff0000
+            )
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🧠 KNOWLEDGE STATUS AGENT
+@bot.tree.command(name="knowledge_status", description="Check knowledge base status")
+async def knowledge_status(interaction: discord.Interaction):
+    """Show knowledge base status"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        summary = bot.knowledge_manager.get_knowledge_summary()
+        
+        embed = discord.Embed(
+            title="🧠 Knowledge Base Status",
+            description="Current status of STAFFVIRTUAL's knowledge base",
+            color=bot.brand_config['primary_color']
+        )
+        
+        embed.add_field(
+            name="📊 Statistics",
+            value=f"Scraped URLs: {summary['scraped_urls']}\nUploaded Documents: {summary['uploaded_documents']}\nTotal Sources: {summary['total_sources']}",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🕒 Last Updated",
+            value=summary['last_updated'] if summary['last_updated'] != 'Never' else 'No recent updates',
+            inline=False
+        )
+        
+        sources = bot.knowledge_manager.knowledge_base.get('sources', [])
+        if sources:
+            source_list = []
+            for source in sources[:5]:
+                source_list.append(f"• {source['type'].title()}: {source['title'][:30]}...")
+            
+            embed.add_field(
+                name="📚 Recent Sources",
+                value="\n".join(source_list),
+                inline=False
+            )
+        
+        embed.set_footer(text="Use /learn_url and /upload_doc to expand the knowledge base")
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# ❓ HELP COMMAND
+@bot.tree.command(name="help", description="Show all available commands")
+async def help_command(interaction: discord.Interaction):
+    """Show help information"""
     embed = discord.Embed(
-        title="✅ STAFFVIRTUAL Bot is Working!",
-        description="All systems operational. Ready to help with branded content creation.",
+        title="🤖 STAFFVIRTUAL Brand Assistant",
+        description="Your AI-powered creative companion with 12 specialized agents",
         color=bot.brand_config['primary_color']
     )
+    
+    embed.add_field(name="🎨 /image", value="Generate branded image concepts", inline=True)
+    embed.add_field(name="📄 /document", value="Create branded documents", inline=True)
+    embed.add_field(name="🏢 /brand", value="Get strategic brand guidance", inline=True)
+    embed.add_field(name="🎬 /video", value="Generate video strategies", inline=True)
+    embed.add_field(name="📝 /blog", value="Create SEO blog posts", inline=True)
+    embed.add_field(name="📱 /social", value="Create social media posts", inline=True)
+    embed.add_field(name="📅 /calendar", value="Generate content calendars", inline=True)
+    embed.add_field(name="🤔 /ask", value="Ask business questions", inline=True)
+    embed.add_field(name="🌐 /learn_url", value="Learn from websites", inline=True)
+    embed.add_field(name="📄 /upload_doc", value="Upload brand documents", inline=True)
+    embed.add_field(name="🧠 /knowledge_status", value="Check knowledge base", inline=True)
+    embed.add_field(name="🧪 /test", value="Test bot functionality", inline=True)
+    
+    embed.set_footer(text="All responses are optimized for STAFFVIRTUAL brand consistency")
+    
+    await interaction.response.send_message(embed=embed)
+
+# 🧪 TEST COMMAND (Keep the existing one)
+@bot.tree.command(name="test", description="Test if the bot is working")
+async def test_command(interaction: discord.Interaction):
+    """Test command"""
+    embed = discord.Embed(
+        title="✅ STAFFVIRTUAL Bot is Working!",
+        description="All 12 AI agents are operational and ready for branded content creation.",
+        color=bot.brand_config['primary_color']
+    )
+    embed.add_field(name="🤖 Available Agents", value="12 specialized AI agents ready", inline=True)
+    embed.add_field(name="🧠 Knowledge Base", value="Ready to learn from URLs and documents", inline=True)
+    embed.add_field(name="🎨 Brand Colors", value=f"Primary: #{bot.brand_config['primary_color']:06x}", inline=True)
     await interaction.response.send_message(embed=embed)
 
 # Run the bot

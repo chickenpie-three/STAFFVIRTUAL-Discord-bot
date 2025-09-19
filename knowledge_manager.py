@@ -3,13 +3,22 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urljoin
-import PyPDF2
-from docx import Document
 import io
 import logging
 from typing import List, Dict, Any
 import asyncio
 import aiohttp
+
+# Optional imports - will be handled in the processing functions
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+
+try:
+    from docx import Document
+except ImportError:
+    Document = None
 
 logger = logging.getLogger(__name__)
 
@@ -118,20 +127,34 @@ class KnowledgeManager:
             return {}
     
     def process_pdf_document(self, file_content: bytes, filename: str) -> Dict[str, Any]:
-        """Process PDF document and extract text"""
+        """Process PDF document and extract text with fallback handling"""
         try:
+            # Check if PyPDF2 is available
+            if PyPDF2 is None:
+                logger.error("PyPDF2 not available - PDF processing disabled")
+                return {
+                    "filename": filename,
+                    "type": "pdf",
+                    "content": f"PDF document '{filename}' uploaded but text extraction not available. Please install PyPDF2 for full functionality.",
+                    "processed_at": "",
+                    "error": "PyPDF2 not installed"
+                }
+            
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
             text_content = []
             
             for page_num in range(len(pdf_reader.pages)):
                 page = pdf_reader.pages[page_num]
-                text_content.append(page.extract_text())
+                try:
+                    text_content.append(page.extract_text())
+                except Exception as e:
+                    text_content.append(f"[Error extracting page {page_num + 1}: {str(e)}]")
             
             doc_info = {
                 "filename": filename,
                 "type": "pdf",
                 "pages": len(pdf_reader.pages),
-                "content": "\n".join(text_content),
+                "content": "\n".join(text_content) if text_content else "No text content extracted",
                 "processed_at": "",
                 "summary": ""
             }
@@ -149,11 +172,29 @@ class KnowledgeManager:
             
         except Exception as e:
             logger.error(f"Error processing PDF {filename}: {e}")
-            return {}
+            # Return a basic record even if processing fails
+            return {
+                "filename": filename,
+                "type": "pdf",
+                "content": f"PDF document '{filename}' uploaded but processing failed: {str(e)}",
+                "processed_at": "",
+                "error": str(e)
+            }
     
     def process_docx_document(self, file_content: bytes, filename: str) -> Dict[str, Any]:
-        """Process Word document and extract text"""
+        """Process Word document and extract text with fallback handling"""
         try:
+            # Check if python-docx is available
+            if Document is None:
+                logger.error("python-docx not available - Word document processing disabled")
+                return {
+                    "filename": filename,
+                    "type": "docx",
+                    "content": f"Word document '{filename}' uploaded but text extraction not available. Please install python-docx for full functionality.",
+                    "processed_at": "",
+                    "error": "python-docx not installed"
+                }
+            
             doc = Document(io.BytesIO(file_content))
             text_content = []
             
@@ -165,7 +206,7 @@ class KnowledgeManager:
                 "filename": filename,
                 "type": "docx",
                 "paragraphs": len(doc.paragraphs),
-                "content": "\n".join(text_content),
+                "content": "\n".join(text_content) if text_content else "No text content found",
                 "processed_at": "",
                 "summary": ""
             }
@@ -183,7 +224,14 @@ class KnowledgeManager:
             
         except Exception as e:
             logger.error(f"Error processing DOCX {filename}: {e}")
-            return {}
+            # Return a basic record even if processing fails
+            return {
+                "filename": filename,
+                "type": "docx",
+                "content": f"Word document '{filename}' uploaded but processing failed: {str(e)}",
+                "processed_at": "",
+                "error": str(e)
+            }
     
     def search_knowledge(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """Search through knowledge base for relevant information"""

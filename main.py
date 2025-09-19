@@ -232,7 +232,7 @@ class SVDiscordBot(commands.Bot):
             
             Subject: {prompt}
             Style: {style}, modern, clean, grid-driven aesthetic
-            Brand Colors: Trust Blue (#1888FF), Authority Blue (#004B8D), Clean White (#F8F8EB), Ink Black (#231F20)
+            Brand Colors: SV Blue (#1888FF), Authority Blue (#004B8D), Albatross White (#F8F8EB), Ink Black (#231F20)
             Design System: Modern Weave™ - modular, grid-driven, rooted in Filipino craftsmanship
             Photography Style: Bright, documentary-style, showing process and human infrastructure
             Layout: Grid-first, ample whitespace, decisive hierarchy

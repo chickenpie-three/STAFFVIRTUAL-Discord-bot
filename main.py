@@ -53,10 +53,10 @@ class SVDiscordBot(commands.Bot):
         super().__init__(
             command_prefix='!sv ',
             intents=intents,
-            description='STAFFVIRTUAL Strategic Marketing Suite - 16 AI Agents'
+            description='STAFFVIRTUAL Strategic Marketing Suite - High-Quality AI Agents'
         )
         
-        # Brand configuration with safe parsing
+        # Brand configuration
         def parse_color(color_str, default):
             try:
                 if not color_str or color_str.strip() == '':
@@ -77,6 +77,36 @@ class SVDiscordBot(commands.Bot):
         
         self.ai_clients = self._initialize_ai_clients()
         self.knowledge_manager = KnowledgeManager()
+        
+        # Enhanced brand context with specific company details
+        self.brand_dna = f"""
+        STAFFVIRTUAL Brand DNA:
+        
+        Company: Premium virtual staffing and business support services
+        Mission: Provide high-quality virtual staffing solutions that help businesses scale efficiently
+        Target Market: Small to medium businesses, startups, entrepreneurs, growing companies
+        Services: Virtual Assistants, Creative Services, Technical Support, Marketing Services
+        
+        Brand Identity:
+        - Colors: Primary #1888FF (Trust Blue), Secondary #F8F8EB (Clean White), Accent #004B8D (Authority Blue)
+        - Style: {self.brand_config['style_guidelines']}
+        - Voice: {self.brand_config['voice_tone']}
+        - Values: Reliability, Professionalism, Innovation, Efficiency, Transparency
+        
+        Competitive Advantages:
+        - Carefully vetted virtual professionals
+        - Flexible engagement models (hourly, project, retainer)
+        - 24/7 support availability
+        - Industry expertise across multiple sectors
+        - Scalable solutions that grow with business needs
+        
+        Key Differentiators:
+        - Premium quality over low-cost alternatives
+        - Specialized expertise in virtual team management
+        - Proven track record of client success
+        - Technology-enabled service delivery
+        - Focus on long-term partnership relationships
+        """
     
     def _initialize_ai_clients(self):
         """Initialize AI clients"""
@@ -91,7 +121,7 @@ class SVDiscordBot(commands.Bot):
                 else:
                     genai.configure(api_key=gemini_key)
                     clients['gemini'] = genai.GenerativeModel('gemini-1.5-flash')
-                    logger.info("Gemini legacy client initialized")
+                    logger.info("Gemini client initialized")
             except Exception as e:
                 logger.error(f"Gemini init error: {e}")
         
@@ -111,7 +141,7 @@ class SVDiscordBot(commands.Bot):
             if 'nano_banana' not in self.ai_clients:
                 return {"success": False, "error": "Nano Banana not available"}
             
-            branded_prompt = f"Create professional STAFFVIRTUAL image: {prompt}. Style: {style}. Brand colors: blue (#1888FF), off-white (#F8F8EB), dark blue (#004B8D). Professional, modern, clean aesthetic."
+            branded_prompt = f"Create professional STAFFVIRTUAL image: {prompt}. Style: {style}. Brand colors: blue (#1888FF), off-white (#F8F8EB), dark blue (#004B8D). Professional, modern, clean aesthetic suitable for virtual staffing company marketing."
             
             response = self.ai_clients['nano_banana'].models.generate_content(
                 model="gemini-2.5-flash-image-preview",
@@ -138,40 +168,47 @@ class SVDiscordBot(commands.Bot):
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    async def _get_ai_response(self, prompt, system_context="", use_knowledge=True):
-        """Get AI response"""
+    async def _get_ai_response(self, prompt, system_context="", use_knowledge=True, max_length=900):
+        """Get AI response with improved prompting and length control"""
         try:
-            knowledge_context = ""
-            if use_knowledge:
-                try:
-                    knowledge_context = self.knowledge_manager.get_context_for_query(prompt)
-                    if knowledge_context and knowledge_context != "No specific information found in knowledge base.":
-                        knowledge_context = f"\n\nSTAFFVIRTUAL Knowledge: {knowledge_context}\n"
-                except:
-                    knowledge_context = ""
+            # Enhanced prompt engineering for better results
+            enhanced_prompt = f"""
+            {self.brand_dna}
             
-            brand_context = f"""You are an AI for {self.brand_config['name']}, a premium virtual staffing company.
-Brand: {self.brand_config['style_guidelines']}. Voice: {self.brand_config['voice_tone']}.
-Colors: #1888FF, #F8F8EB, #004B8D. {system_context}"""
+            Your Role: {system_context}
             
-            full_context = brand_context + knowledge_context
+            User Request: {prompt}
+            
+            Instructions:
+            1. Provide specific, actionable guidance tailored to STAFFVIRTUAL
+            2. Reference our actual services, values, and competitive advantages
+            3. Keep response under {max_length} characters for optimal display
+            4. Focus on practical, implementable recommendations
+            5. Maintain our professional yet approachable brand voice
+            6. Include specific next steps or action items
+            
+            Respond with expertise and specificity, not generic advice.
+            """
             
             # Try Nano Banana first
             if 'nano_banana' in self.ai_clients:
                 try:
                     response = self.ai_clients['nano_banana'].models.generate_content(
                         model="gemini-2.0-flash-exp",
-                        contents=[f"{full_context}\n\nRequest: {prompt}"]
+                        contents=[enhanced_prompt]
                     )
-                    return response.candidates[0].content.parts[0].text
+                    result = response.candidates[0].content.parts[0].text
+                    # Truncate if too long
+                    return result[:max_length] + "..." if len(result) > max_length else result
                 except Exception as e:
                     logger.error(f"Nano Banana text error: {e}")
             
             # Try legacy Gemini
             if 'gemini' in self.ai_clients:
                 try:
-                    response = self.ai_clients['gemini'].generate_content(f"{full_context}\n\nRequest: {prompt}")
-                    return response.text
+                    response = self.ai_clients['gemini'].generate_content(enhanced_prompt)
+                    result = response.text
+                    return result[:max_length] + "..." if len(result) > max_length else result
                 except Exception as e:
                     logger.error(f"Gemini error: {e}")
             
@@ -181,12 +218,13 @@ Colors: #1888FF, #F8F8EB, #004B8D. {system_context}"""
                     response = self.ai_clients['openai'].chat.completions.create(
                         model="gpt-4",
                         messages=[
-                            {"role": "system", "content": full_context},
+                            {"role": "system", "content": self.brand_dna + "\n" + system_context},
                             {"role": "user", "content": prompt}
                         ],
-                        max_tokens=2000
+                        max_tokens=1500
                     )
-                    return response.choices[0].message.content
+                    result = response.choices[0].message.content
+                    return result[:max_length] + "..." if len(result) > max_length else result
                 except Exception as e:
                     logger.error(f"OpenAI error: {e}")
             
@@ -195,8 +233,10 @@ Colors: #1888FF, #F8F8EB, #004B8D. {system_context}"""
             return f"❌ Error: {str(e)}"
     
     def _add_to_knowledge_base(self, title: str, content: str):
-        """Add to knowledge base"""
+        """Add to simple knowledge base"""
         try:
+            if not hasattr(self, 'knowledge_base'):
+                self.knowledge_base = {"manual_entries": {}, "scraped_content": {}}
             self.knowledge_base["manual_entries"][title] = {"content": content, "type": "manual"}
             return True
         except:
@@ -211,7 +251,7 @@ Colors: #1888FF, #F8F8EB, #004B8D. {system_context}"""
             logger.error(f"Sync error: {e}")
     
     async def on_ready(self):
-        logger.info(f'{self.user} connected! Available services: {list(self.ai_clients.keys())}')
+        logger.info(f'{self.user} connected! Services: {list(self.ai_clients.keys())}')
         logger.info(f"Nano Banana: {NANO_BANANA_AVAILABLE}")
         await self.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="STAFFVIRTUAL marketing ops"))
 
@@ -226,16 +266,20 @@ async def cmd_image(interaction: discord.Interaction, prompt: str, style: str = 
     try:
         result = await bot._generate_nano_banana_image(prompt, style)
         if result['success'] and result.get('image_path'):
-            embed = discord.Embed(title="🍌 STAFFVIRTUAL Image Generated!", color=bot.brand_config['primary_color'])
+            embed = discord.Embed(
+                title="🍌 STAFFVIRTUAL Image Generated!",
+                description=f"**Prompt:** {prompt}\n**Style:** {style}",
+                color=bot.brand_config['primary_color']
+            )
             file = discord.File(result['image_path'], filename=f"staffvirtual_{prompt.replace(' ', '_')[:20]}.png")
             embed.set_image(url=f"attachment://staffvirtual_{prompt.replace(' ', '_')[:20]}.png")
             await interaction.followup.send(embed=embed, file=file)
             try: os.unlink(result['image_path'])
             except: pass
         else:
-            concept = await bot._get_ai_response(f"Create detailed image concept: {prompt}, style: {style}", "Image concept designer")
-            embed = discord.Embed(title="🎨 Image Concept", color=bot.brand_config['primary_color'])
-            embed.add_field(name="🖼️ Concept", value=concept[:1024], inline=False)
+            concept = await bot._get_ai_response(f"Create detailed STAFFVIRTUAL image concept: {prompt}, style: {style}", "Expert image concept designer specializing in virtual staffing company branding")
+            embed = discord.Embed(title="🎨 STAFFVIRTUAL Image Concept", color=bot.brand_config['primary_color'])
+            embed.add_field(name="🖼️ Concept", value=concept, inline=False)
             await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}")
@@ -244,14 +288,36 @@ async def cmd_image(interaction: discord.Interaction, prompt: str, style: str = 
 async def cmd_content(interaction: discord.Interaction, content_type: str, topic: str, keywords: str = ""):
     await interaction.response.defer(thinking=True)
     try:
-        system_context = "Content marketing strategist and SEO specialist for STAFFVIRTUAL."
-        prompt = f"Create {content_type} for STAFFVIRTUAL: {topic}. Keywords: {keywords or 'virtual assistants, remote work'}. Include SEO optimization and conversion focus."
-        result = await bot._get_ai_response(prompt, system_context)
+        system_context = "Senior content marketing strategist and SEO specialist for STAFFVIRTUAL. Expert in virtual staffing industry content that drives qualified leads and establishes thought leadership."
         
-        embed = discord.Embed(title="📝 STAFFVIRTUAL Content Created!", color=bot.brand_config['primary_color'])
-        file_buffer = io.BytesIO(f"# STAFFVIRTUAL {content_type}: {topic}\n\n{result}".encode('utf-8'))
+        prompt = f"""
+        Create high-converting {content_type} for STAFFVIRTUAL about: {topic}
+        Target Keywords: {keywords or 'virtual assistants, remote work, business efficiency'}
+        
+        Requirements:
+        - Position STAFFVIRTUAL as the premium virtual staffing solution
+        - Include specific benefits of our services
+        - Address common pain points of our target market (SMBs, startups)
+        - Include compelling statistics and industry insights
+        - End with clear call-to-action for consultation or service inquiry
+        - Optimize for search engines and lead generation
+        """
+        
+        result = await bot._get_ai_response(prompt, system_context, max_length=2000)
+        
+        embed = discord.Embed(
+            title="📝 STAFFVIRTUAL Content Created!",
+            description=f"**Type:** {content_type}\n**Topic:** {topic}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create file
+        file_buffer = io.BytesIO(f"# STAFFVIRTUAL {content_type.title()}: {topic}\n\n{result}".encode('utf-8'))
         file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_{content_type}_{topic.replace(' ', '_')}.md")
-        embed.add_field(name="📋 Preview", value=result[:600] + "..." if len(result) > 600 else result, inline=False)
+        
+        # Safe preview length
+        preview = result[:800] + "..." if len(result) > 800 else result
+        embed.add_field(name="📋 Content Preview", value=preview, inline=False)
         
         await interaction.followup.send(embed=embed, file=file)
     except Exception as e:
@@ -261,43 +327,75 @@ async def cmd_content(interaction: discord.Interaction, content_type: str, topic
 async def cmd_social(interaction: discord.Interaction, platform: str, topic: str, hashtags: str = ""):
     await interaction.response.defer(thinking=True)
     try:
-        system_context = "Social media marketing expert for STAFFVIRTUAL."
-        prompt = f"Create {platform} post for STAFFVIRTUAL: {topic}. Include engagement hooks, CTAs, hashtags: {hashtags or 'suggest optimal'}."
-        result = await bot._get_ai_response(prompt, system_context)
+        system_context = f"Expert social media strategist for STAFFVIRTUAL specializing in {platform} marketing for virtual staffing companies. Focus on lead generation and engagement."
         
-        embed = discord.Embed(title="📱 STAFFVIRTUAL Social Post!", color=bot.brand_config['primary_color'])
-        embed.add_field(name=f"📝 {platform.title()}", value=result, inline=False)
+        prompt = f"""
+        Create a high-engagement {platform} post for STAFFVIRTUAL about: {topic}
+        
+        STAFFVIRTUAL Context:
+        - We provide premium virtual assistants and remote staff
+        - Target audience: Business owners, entrepreneurs, growing companies
+        - Key benefits: Cost savings, flexibility, expertise, scalability
+        
+        Platform Strategy for {platform}:
+        - LinkedIn: B2B professional content, thought leadership, case studies
+        - Instagram: Behind-the-scenes, team culture, visual storytelling
+        - Twitter: Industry insights, quick tips, trending topics
+        - Facebook: Community building, educational content, testimonials
+        
+        Include:
+        - Attention-grabbing hook
+        - Specific STAFFVIRTUAL value proposition
+        - Clear call-to-action
+        - Strategic hashtags: {hashtags or 'research and suggest 5-10 optimal hashtags'}
+        """
+        
+        result = await bot._get_ai_response(prompt, system_context, max_length=900)
+        
+        embed = discord.Embed(
+            title="📱 STAFFVIRTUAL Social Media Post!",
+            description=f"**Platform:** {platform.title()}\n**Topic:** {topic}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        embed.add_field(name=f"📝 {platform.title()} Post", value=result, inline=False)
+        embed.set_footer(text=f"Optimized for {platform} engagement and STAFFVIRTUAL lead generation")
+        
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}")
 
-@bot.tree.command(name="calendar", description="📅 Strategic content calendars")
-async def cmd_calendar(interaction: discord.Interaction, duration: str = "1 month", focus: str = "lead_generation"):
+@bot.tree.command(name="brand", description="🏢 Strategic brand guidance")
+async def cmd_brand(interaction: discord.Interaction, query: str):
     await interaction.response.defer(thinking=True)
     try:
-        system_context = "Content marketing strategist for STAFFVIRTUAL."
-        prompt = f"Create strategic content calendar for {duration}, focus: {focus}. Multi-platform, lead generation optimized."
-        result = await bot._get_ai_response(prompt, system_context)
+        system_context = "Senior brand strategist and consultant specifically for STAFFVIRTUAL. Expert in virtual staffing industry positioning, competitive differentiation, and premium service branding."
         
-        embed = discord.Embed(title="📅 STAFFVIRTUAL Calendar!", color=bot.brand_config['primary_color'])
-        file_buffer = io.BytesIO(f"# STAFFVIRTUAL Calendar - {duration}\n{result}".encode('utf-8'))
-        file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_calendar_{duration.replace(' ', '_')}.md")
-        embed.add_field(name="📋 Preview", value=result[:600] + "..." if len(result) > 600 else result, inline=False)
+        prompt = f"""
+        Provide strategic brand guidance for STAFFVIRTUAL regarding: {query}
         
-        await interaction.followup.send(embed=embed, file=file)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="newsletter", description="📰 Email campaigns and newsletters")
-async def cmd_newsletter(interaction: discord.Interaction, newsletter_type: str, topic: str, audience: str = "prospects"):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Email marketing specialist for STAFFVIRTUAL."
-        prompt = f"Create {newsletter_type} newsletter for STAFFVIRTUAL: {topic}. Audience: {audience}. Include subject lines, CTAs."
-        result = await bot._get_ai_response(prompt, system_context)
+        Context: STAFFVIRTUAL is a premium virtual staffing company competing against both low-cost offshore providers and traditional staffing agencies.
         
-        embed = discord.Embed(title="📰 STAFFVIRTUAL Newsletter!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="📧 Preview", value=result[:800] + "..." if len(result) > 800 else result, inline=False)
+        Consider:
+        - Our premium positioning and quality focus
+        - Target market of growing SMBs and startups
+        - Competitive landscape in virtual staffing
+        - Our core values: reliability, professionalism, innovation
+        - Need to differentiate from commodity virtual assistant services
+        
+        Provide specific, actionable recommendations that strengthen our market position.
+        """
+        
+        result = await bot._get_ai_response(prompt, system_context, max_length=900)
+        
+        embed = discord.Embed(
+            title="🏢 STAFFVIRTUAL Brand Strategy",
+            description=f"**Query:** {query}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        embed.add_field(name="📋 Strategic Guidance", value=result, inline=False)
+        
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}")
@@ -306,171 +404,70 @@ async def cmd_newsletter(interaction: discord.Interaction, newsletter_type: str,
 async def cmd_document(interaction: discord.Interaction, document_type: str, topic: str, length: str = "medium"):
     await interaction.response.defer(thinking=True)
     try:
-        system_context = "Professional document specialist for STAFFVIRTUAL."
-        prompt = f"Create {length} {document_type} for STAFFVIRTUAL: {topic}. Professional structure and brand voice."
-        result = await bot._get_ai_response(prompt, system_context)
+        system_context = "Professional business document specialist for STAFFVIRTUAL. Expert in creating compelling proposals, case studies, and business documents for virtual staffing services."
         
-        embed = discord.Embed(title="📄 STAFFVIRTUAL Document!", color=bot.brand_config['primary_color'])
-        file_buffer = io.BytesIO(f"# STAFFVIRTUAL {document_type}: {topic}\n\n{result}".encode('utf-8'))
+        prompt = f"""
+        Create a {length} {document_type} for STAFFVIRTUAL about: {topic}
+        
+        Document should:
+        - Clearly articulate STAFFVIRTUAL's value proposition
+        - Address specific client pain points and challenges
+        - Include relevant case studies or success metrics
+        - Maintain professional tone while being approachable
+        - Include clear next steps and call-to-action
+        - Reflect our premium positioning in the virtual staffing market
+        """
+        
+        result = await bot._get_ai_response(prompt, system_context, max_length=2000)
+        
+        embed = discord.Embed(
+            title="📄 STAFFVIRTUAL Document Created!",
+            description=f"**Type:** {document_type}\n**Topic:** {topic}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create file
+        file_buffer = io.BytesIO(f"# STAFFVIRTUAL {document_type.title()}: {topic}\n\n{result}".encode('utf-8'))
         file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_{document_type}_{topic.replace(' ', '_')}.txt")
-        embed.add_field(name="📋 Preview", value=result[:500] + "..." if len(result) > 500 else result, inline=False)
+        
+        preview = result[:500] + "..." if len(result) > 500 else result
+        embed.add_field(name="📋 Document Preview", value=preview, inline=False)
         
         await interaction.followup.send(embed=embed, file=file)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}")
 
-# ===== GROWTH & CAMPAIGNS =====
-
-@bot.tree.command(name="brand", description="🏢 Strategic brand guidance")
-async def cmd_brand(interaction: discord.Interaction, query: str):
+@bot.tree.command(name="ask", description="🤔 Ask questions about STAFFVIRTUAL")
+async def cmd_ask(interaction: discord.Interaction, question: str):
     await interaction.response.defer(thinking=True)
     try:
-        system_context = "Senior brand strategist for STAFFVIRTUAL."
-        result = await bot._get_ai_response(query, system_context)
+        system_context = "Business intelligence assistant with comprehensive knowledge of STAFFVIRTUAL's services, processes, competitive advantages, and market positioning."
         
-        embed = discord.Embed(title="🏢 STAFFVIRTUAL Brand Strategy", color=bot.brand_config['primary_color'])
-        embed.add_field(name="📋 Guidance", value=result[:1024], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="growth", description="🎯 Ads, funnels, landing pages")
-async def cmd_growth(interaction: discord.Interaction, growth_type: str, objective: str, audience: str = "SMBs"):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Growth marketing specialist for STAFFVIRTUAL."
-        prompt = f"Create {growth_type} for STAFFVIRTUAL. Objective: {objective}. Audience: {audience}. Focus on conversion optimization."
-        result = await bot._get_ai_response(prompt, system_context)
+        prompt = f"""
+        Answer this question about STAFFVIRTUAL: {question}
         
-        embed = discord.Embed(title="🎯 STAFFVIRTUAL Growth Strategy!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="🚀 Strategy", value=result[:1024], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="campaign", description="🎪 Comprehensive marketing campaigns")
-async def cmd_campaign(interaction: discord.Interaction, campaign_type: str, goal: str, budget: str = "medium"):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Marketing campaign strategist for STAFFVIRTUAL."
-        prompt = f"Design {campaign_type} campaign for STAFFVIRTUAL. Goal: {goal}. Budget: {budget}. Multi-channel approach."
-        result = await bot._get_ai_response(prompt, system_context)
+        Provide accurate information about:
+        - Our virtual staffing services and capabilities
+        - Competitive advantages and differentiators
+        - Target market and ideal clients
+        - Pricing models and service packages
+        - Success stories and client outcomes
+        - Company values and approach
         
-        embed = discord.Embed(title="🎪 STAFFVIRTUAL Campaign!", color=bot.brand_config['primary_color'])
-        file_buffer = io.BytesIO(f"# STAFFVIRTUAL Campaign: {campaign_type}\n{result}".encode('utf-8'))
-        file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_campaign_{campaign_type}.md")
-        embed.add_field(name="📋 Preview", value=result[:600] + "..." if len(result) > 600 else result, inline=False)
+        If specific information isn't available, provide general guidance based on virtual staffing industry best practices.
+        """
         
-        await interaction.followup.send(embed=embed, file=file)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="roi", description="📈 ROI analysis and business cases")
-async def cmd_roi(interaction: discord.Interaction, scenario: str, timeframe: str = "1 year"):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Business analyst and ROI specialist for STAFFVIRTUAL."
-        prompt = f"Create ROI analysis for STAFFVIRTUAL scenario: {scenario}. Timeframe: {timeframe}. Include specific metrics and business case."
-        result = await bot._get_ai_response(prompt, system_context)
+        result = await bot._get_ai_response(prompt, system_context, use_knowledge=True, max_length=900)
         
-        embed = discord.Embed(title="📈 STAFFVIRTUAL ROI Analysis!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="💰 Analysis", value=result[:1024], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-# ===== RESEARCH & INSIGHTS =====
-
-@bot.tree.command(name="research", description="📊 Market research and competitor analysis")
-async def cmd_research(interaction: discord.Interaction, research_type: str, topic: str):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Market research analyst for STAFFVIRTUAL."
-        prompt = f"Conduct {research_type} research for STAFFVIRTUAL on: {topic}. Provide actionable insights and strategic recommendations."
-        result = await bot._get_ai_response(prompt, system_context)
+        embed = discord.Embed(
+            title="🤔 STAFFVIRTUAL Business Q&A",
+            description=f"**Question:** {question}",
+            color=bot.brand_config['primary_color']
+        )
         
-        embed = discord.Embed(title="📊 STAFFVIRTUAL Research!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="🔍 Findings", value=result[:1024], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="audience", description="👥 Target audience analysis and personas")
-async def cmd_audience(interaction: discord.Interaction, audience_type: str, industry: str = "general"):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Audience research specialist for STAFFVIRTUAL."
-        prompt = f"Analyze {audience_type} audience for STAFFVIRTUAL in {industry}. Create detailed personas and targeting strategies."
-        result = await bot._get_ai_response(prompt, system_context)
+        embed.add_field(name="💡 Answer", value=result, inline=False)
+        embed.set_footer(text="Based on STAFFVIRTUAL knowledge base and industry expertise")
         
-        embed = discord.Embed(title="👥 STAFFVIRTUAL Audience Analysis!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="🎯 Insights", value=result[:1024], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="pulse", description="🔔 Industry trends and competitive intelligence")
-async def cmd_pulse(interaction: discord.Interaction, focus_area: str = "virtual_staffing"):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Market intelligence analyst for STAFFVIRTUAL."
-        prompt = f"Create market pulse report for STAFFVIRTUAL focused on: {focus_area}. Include trends, opportunities, threats."
-        result = await bot._get_ai_response(prompt, system_context)
-        
-        embed = discord.Embed(title="🔔 STAFFVIRTUAL Market Pulse!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="📈 Intelligence", value=result[:1024], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-# ===== KNOWLEDGE & OPS =====
-
-@bot.tree.command(name="knowledge", description="🧠 Q&A, learning, knowledge management")
-async def cmd_knowledge(interaction: discord.Interaction, action: str, query: str = "", content: str = ""):
-    await interaction.response.defer(thinking=True)
-    try:
-        if action == "ask":
-            result = await bot._get_ai_response(query, "Business intelligence assistant", use_knowledge=True)
-            embed = discord.Embed(title="🤔 STAFFVIRTUAL Q&A", color=bot.brand_config['primary_color'])
-            embed.add_field(name="💡 Answer", value=result[:1024], inline=False)
-        elif action == "add":
-            bot._add_to_knowledge_base(query, content)
-            embed = discord.Embed(title="📝 Info Added!", color=bot.brand_config['primary_color'])
-            embed.add_field(name="📄 Content", value=content[:500], inline=False)
-        elif action == "status":
-            embed = discord.Embed(title="🧠 Knowledge Status", color=bot.brand_config['primary_color'])
-            embed.add_field(name="📊 Stats", value="Knowledge base operational", inline=False)
-        else:
-            embed = discord.Embed(title="❌ Invalid Action", description="Use: ask, add, or status", color=0xff0000)
-        
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="case_study", description="🧩 Structured case studies")
-async def cmd_case_study(interaction: discord.Interaction, client_type: str, challenge: str):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Case study specialist for STAFFVIRTUAL."
-        prompt = f"Create professional case study for {client_type} with challenge: {challenge}. Include results and ROI."
-        result = await bot._get_ai_response(prompt, system_context)
-        
-        embed = discord.Embed(title="🧩 STAFFVIRTUAL Case Study!", color=bot.brand_config['primary_color'])
-        embed.add_field(name="📋 Preview", value=result[:800], inline=False)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-@bot.tree.command(name="brand_guardian", description="🧑‍💻 Brand compliance review")
-async def cmd_brand_guardian(interaction: discord.Interaction, content_to_review: str):
-    await interaction.response.defer(thinking=True)
-    try:
-        system_context = "Brand guardian for STAFFVIRTUAL. Review for compliance."
-        prompt = f"Review for STAFFVIRTUAL brand compliance: {content_to_review}"
-        result = await bot._get_ai_response(prompt, system_context)
-        
-        embed = discord.Embed(title="🧑‍💻 Brand Review", color=bot.brand_config['primary_color'])
-        embed.add_field(name="✅ Compliance", value=result[:1024], inline=False)
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {str(e)}")
@@ -480,25 +477,55 @@ async def cmd_brand_guardian(interaction: discord.Interaction, content_to_review
 @bot.tree.command(name="test", description="🧪 Test system functionality")
 async def cmd_test(interaction: discord.Interaction):
     try:
-        embed = discord.Embed(title="✅ STAFFVIRTUAL Strategic Marketing Suite", color=bot.brand_config['primary_color'])
-        embed.add_field(name="🤖 AI", value=f"Services: {list(bot.ai_clients.keys())}", inline=False)
-        embed.add_field(name="🍌 Nano Banana", value=f"{'✅ Available' if NANO_BANANA_AVAILABLE else '❌ Legacy'}", inline=False)
+        embed = discord.Embed(
+            title="✅ STAFFVIRTUAL Strategic Marketing Suite",
+            description="High-quality AI agents ready for professional content creation",
+            color=bot.brand_config['primary_color']
+        )
+        embed.add_field(name="🤖 AI Services", value=f"Available: {list(bot.ai_clients.keys())}", inline=False)
+        embed.add_field(name="🍌 Nano Banana", value=f"{'✅ Available' if NANO_BANANA_AVAILABLE else '❌ Legacy mode'}", inline=False)
+        embed.add_field(name="🧠 Knowledge", value="Enhanced brand DNA and context loaded", inline=False)
+        embed.add_field(name="🎨 Brand", value=f"#{bot.brand_config['primary_color']:06x} • {bot.brand_config['voice_tone'][:30]}...", inline=False)
+        
         await interaction.response.send_message(embed=embed)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Error: {str(e)}")
+        await interaction.response.send_message(f"❌ Test failed: {str(e)}")
 
-@bot.tree.command(name="help", description="❓ Show all commands organized by function")
+@bot.tree.command(name="help", description="❓ Show all commands")
 async def cmd_help(interaction: discord.Interaction):
     try:
-        embed = discord.Embed(title="🤖 STAFFVIRTUAL Strategic Marketing Suite", description="16 specialized AI agents", color=bot.brand_config['primary_color'])
+        embed = discord.Embed(
+            title="🤖 STAFFVIRTUAL Strategic Marketing Suite",
+            description="High-quality AI agents for professional content creation",
+            color=bot.brand_config['primary_color']
+        )
         
-        embed.add_field(name="🎨 Creative & Content", value="• `/image` `/content` `/social` `/calendar` `/newsletter` `/document`", inline=False)
-        embed.add_field(name="🚀 Growth & Campaigns", value="• `/brand` `/growth` `/campaign` `/roi`", inline=False)
-        embed.add_field(name="🔍 Research & Insights", value="• `/research` `/audience` `/pulse`", inline=False)
-        embed.add_field(name="🧠 Knowledge & Ops", value="• `/knowledge` `/case_study` `/brand_guardian`", inline=False)
-        embed.add_field(name="🛠️ Utility", value="• `/test` `/help`", inline=False)
+        embed.add_field(
+            name="🎨 Creative & Content",
+            value="• `/image` - Nano Banana generation\n• `/content` - Blog + SEO + keywords\n• `/social` - Social media posts\n• `/document` - Business documents",
+            inline=False
+        )
         
-        embed.set_footer(text="Strategic AI agents for institutional clarity and business results")
+        embed.add_field(
+            name="🏢 Business & Strategy", 
+            value="• `/brand` - Strategic guidance\n• `/ask` - Business Q&A",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="🛠️ Utility",
+            value="• `/test` - System status\n• `/help` - This menu",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💡 Examples",
+            value="`/brand 'How should we position against competitors?'`\n`/content blog 'Future of Remote Work' 'virtual assistants'`\n`/social LinkedIn 'productivity tips' '#productivity #remotework'`",
+            inline=False
+        )
+        
+        embed.set_footer(text="Enhanced AI with STAFFVIRTUAL brand DNA for superior results")
+        
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         await interaction.response.send_message(f"❌ Error: {str(e)}")

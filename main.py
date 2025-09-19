@@ -25,11 +25,8 @@ try:
 except ImportError:
     genai = None
 
-# Knowledge management - simplified for Railway
-try:
-    from knowledge_manager_simple import SimpleKnowledgeManager as KnowledgeManager
-except ImportError:
-    from knowledge_manager import KnowledgeManager
+# Knowledge management
+from knowledge_manager import KnowledgeManager
 
 # Load environment variables
 load_dotenv()

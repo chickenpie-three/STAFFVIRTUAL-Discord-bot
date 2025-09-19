@@ -1,21 +1,15 @@
-# Core Discord Bot Dependencies
+# Core Discord Bot Dependencies - Ultra Stable
 discord.py==2.3.2
 python-dotenv==1.0.0
 
-# AI Libraries - Updated for Nano Banana
-google-genai==1.32.0
-google-generativeai==0.8.0
+# AI Libraries - Stable versions only
+google-generativeai==0.3.0
 openai==1.3.0
-anthropic==0.7.0
 
-# Image processing for Nano Banana
-Pillow==10.1.0
-
-# Basic utilities
+# Basic utilities - Minimal set
 aiohttp==3.9.0
 requests==2.31.0
 beautifulsoup4==4.12.2
 
-# Document processing - lightweight
-PyPDF2==3.0.1
-python-docx==1.1.0
+# Image processing - Essential only
+Pillow==10.1.0

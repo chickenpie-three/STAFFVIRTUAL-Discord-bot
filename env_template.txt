@@ -12,11 +12,10 @@ GROQ_API_KEY=your_groq_api_key_here
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 
-# AutoAgent Configuration
-COMPLETION_MODEL=gemini/gemini-2.0-flash-exp
+# AI Model Configuration
+COMPLETION_MODEL=gemini-2.0-flash-exp
+IMAGE_MODEL=gemini-2.5-flash
 DEBUG=False
-API_BASE_URL=
-FN_CALL=
 
 # Brand Configuration
 BRAND_NAME=STAFFVIRTUAL
@@ -25,8 +24,7 @@ BRAND_SECONDARY_COLOR=#F8F8EB
 BRAND_ACCENT_COLOR=#004B8D
 
 # Image Generation Preferences
-# Using Gemini 2.5 Nano Banana model as preferred for image generation
-IMAGE_MODEL=gemini/gemini-2.5-nano-banana
+# Using Gemini 2.5 Flash for image generation (Nano Banana approach)
 IMAGE_STYLE_DEFAULT=modern,clean,professional
 
 # Document Generation

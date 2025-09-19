@@ -2,39 +2,21 @@ import discord
 from discord.ext import commands
 import asyncio
 import logging
-from typing import Dict, Any
-import json
 import os
 from dotenv import load_dotenv
-import tempfile
 import io
-import base64
-from PIL import Image
+import json
 
-# AI Libraries with proper imports
+# AI Libraries with safe imports
 try:
-    from google import genai
-    from google.genai import types
+    import google.generativeai as genai
 except ImportError:
-    try:
-        import google.generativeai as genai
-        types = None
-    except ImportError:
-        genai = None
-        types = None
+    genai = None
 
 try:
     import openai
 except ImportError:
     openai = None
-    
-try:
-    import anthropic
-except ImportError:
-    anthropic = None
-
-# Knowledge management
-from knowledge_manager import KnowledgeManager
 
 # Load environment variables
 load_dotenv()
@@ -53,7 +35,7 @@ class SVDiscordBot(commands.Bot):
         super().__init__(
             command_prefix='!sv ',
             intents=intents,
-            description='STAFFVIRTUAL Brand Assistant Bot - AI-powered with Nano Banana image generation'
+            description='STAFFVIRTUAL Brand Assistant Bot - AI-powered content creation'
         )
         
         # Initialize brand configuration with safe color parsing
@@ -78,27 +60,45 @@ class SVDiscordBot(commands.Bot):
             'voice_tone': 'Professional yet approachable, confident, and creative'
         }
         
-        # Initialize AI clients and knowledge manager
+        # Initialize AI clients
         self.ai_clients = self._initialize_ai_clients()
-        self.knowledge_manager = KnowledgeManager()
+        
+        # Simple knowledge base (in-memory for now)
+        self.knowledge_base = {
+            "company_info": {
+                "name": "STAFFVIRTUAL",
+                "description": "Professional virtual staffing and business support services",
+                "services": ["Virtual Assistants", "Creative Services", "Technical Support", "Marketing Services"],
+                "brand_colors": ["#1888FF (Primary Blue)", "#F8F8EB (Secondary Off-white)", "#004B8D (Accent Dark Blue)"]
+            },
+            "manual_entries": {},
+            "scraped_content": {}
+        }
     
     def _initialize_ai_clients(self):
-        """Initialize AI clients with proper error handling"""
+        """Initialize AI clients with robust error handling"""
         clients = {}
         
-        # Initialize Gemini with new API approach
+        # Initialize Gemini with stable model
         gemini_key = os.getenv('GEMINI_API_KEY')
         if gemini_key and genai:
             try:
-                if types:  # New Google GenAI SDK
-                    clients['gemini'] = genai.Client(api_key=gemini_key)
-                    logger.info("Gemini client initialized with new SDK")
-                else:  # Fallback to old SDK
-                    genai.configure(api_key=gemini_key)
-                    clients['gemini_legacy'] = genai.GenerativeModel('gemini-1.5-flash')
-                    logger.info("Gemini legacy client initialized")
+                genai.configure(api_key=gemini_key)
+                
+                # Try stable models first
+                models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+                
+                for model_name in models_to_try:
+                    try:
+                        clients['gemini'] = genai.GenerativeModel(model_name)
+                        logger.info(f"Gemini initialized with model: {model_name}")
+                        break
+                    except Exception as e:
+                        logger.warning(f"Failed to initialize {model_name}: {e}")
+                        continue
+                        
             except Exception as e:
-                logger.error(f"Failed to initialize Gemini: {e}")
+                logger.error(f"Failed to configure Gemini: {e}")
         
         # Initialize OpenAI
         openai_key = os.getenv('OPENAI_API_KEY')
@@ -109,89 +109,12 @@ class SVDiscordBot(commands.Bot):
             except Exception as e:
                 logger.error(f"Failed to initialize OpenAI: {e}")
         
-        # Initialize Anthropic
-        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
-        if anthropic_key and anthropic:
-            try:
-                clients['anthropic'] = anthropic.Anthropic(api_key=anthropic_key)
-                logger.info("Anthropic client initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize Anthropic: {e}")
-        
         return clients
     
-    async def _generate_nano_banana_image(self, prompt: str, style: str = "professional"):
-        """Generate images using Gemini 2.5 Flash Image (Nano Banana)"""
+    async def _get_ai_response(self, prompt, system_context=""):
+        """Get AI response using available clients"""
         try:
-            if 'gemini' not in self.ai_clients:
-                return {"success": False, "error": "Gemini client not available"}
-            
-            # Create STAFFVIRTUAL branded prompt
-            branded_prompt = f"""
-            Create a professional, high-quality image for STAFFVIRTUAL (a virtual staffing company) with these specifications:
-            
-            Subject: {prompt}
-            Style: {style}, modern, clean, professional
-            Brand Colors: Incorporate blue (#1888FF), off-white (#F8F8EB), and dark blue (#004B8D)
-            Quality: High-resolution, professional business quality
-            Composition: Well-balanced, visually appealing, suitable for business use
-            
-            The image should reflect STAFFVIRTUAL's professional, innovative, and trustworthy brand identity.
-            """
-            
-            # Use new Gemini API for image generation
-            response = self.ai_clients['gemini'].models.generate_content(
-                model="gemini-2.5-flash-image-preview",
-                contents=[branded_prompt]
-            )
-            
-            # Process response
-            for part in response.candidates[0].content.parts:
-                if part.text is not None:
-                    return {
-                        "success": True,
-                        "description": part.text,
-                        "model": "gemini-2.5-flash-image-preview",
-                        "prompt_used": branded_prompt
-                    }
-                elif part.inline_data is not None:
-                    # Save the generated image
-                    image_data = part.inline_data.data
-                    image = Image.open(io.BytesIO(image_data))
-                    
-                    # Save to temporary file
-                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                    image.save(temp_file.name)
-                    
-                    return {
-                        "success": True,
-                        "image_path": temp_file.name,
-                        "description": "Image generated successfully",
-                        "model": "gemini-2.5-flash-image-preview",
-                        "prompt_used": branded_prompt
-                    }
-            
-            return {"success": False, "error": "No image data in response"}
-            
-        except Exception as e:
-            logger.error(f"Nano Banana image generation error: {e}")
-            return {"success": False, "error": str(e)}
-    
-    async def _get_ai_response(self, prompt, system_context="", use_knowledge=True):
-        """Get AI text response using available clients"""
-        try:
-            # Get knowledge base context
-            knowledge_context = ""
-            if use_knowledge:
-                try:
-                    knowledge_context = self.knowledge_manager.get_context_for_query(prompt)
-                    if knowledge_context and knowledge_context != "No specific information found in knowledge base.":
-                        knowledge_context = f"\n\nRelevant STAFFVIRTUAL Knowledge: {knowledge_context}\n"
-                except Exception as e:
-                    logger.error(f"Knowledge base error: {e}")
-                    knowledge_context = ""
-            
-            # Brand context
+            # Create brand context
             brand_context = f"""
             You are an AI assistant for {self.brand_config['name']}, a professional virtual staffing company.
             
@@ -199,36 +122,19 @@ class SVDiscordBot(commands.Bot):
             - Style: {self.brand_config['style_guidelines']}
             - Voice & Tone: {self.brand_config['voice_tone']}
             - Colors: Primary #1888FF, Secondary #F8F8EB, Accent #004B8D
-            - Always maintain brand consistency in all outputs
-            """
+            - Services: Virtual Assistants, Creative Services, Technical Support, Marketing Services
             
-            # Combine contexts
-            full_context = brand_context
-            if system_context:
-                full_context += f"\n\nSpecific Role: {system_context}"
-            if knowledge_context:
-                full_context += knowledge_context
+            {system_context}
+            """
             
             # Try Gemini first
             if 'gemini' in self.ai_clients:
                 try:
-                    full_prompt = f"{full_context}\n\nUser Request: {prompt}"
-                    response = self.ai_clients['gemini'].models.generate_content(
-                        model="gemini-2.0-flash-exp",
-                        contents=[full_prompt]
-                    )
-                    return response.candidates[0].content.parts[0].text
-                except Exception as e:
-                    logger.error(f"Gemini error: {e}")
-            
-            # Try legacy Gemini
-            if 'gemini_legacy' in self.ai_clients:
-                try:
-                    full_prompt = f"{full_context}\n\nUser Request: {prompt}"
-                    response = self.ai_clients['gemini_legacy'].generate_content(full_prompt)
+                    full_prompt = f"{brand_context}\n\nUser Request: {prompt}"
+                    response = self.ai_clients['gemini'].generate_content(full_prompt)
                     return response.text
                 except Exception as e:
-                    logger.error(f"Gemini legacy error: {e}")
+                    logger.error(f"Gemini error: {e}")
             
             # Fallback to OpenAI
             if 'openai' in self.ai_clients:
@@ -236,10 +142,10 @@ class SVDiscordBot(commands.Bot):
                     response = self.ai_clients['openai'].chat.completions.create(
                         model="gpt-4",
                         messages=[
-                            {"role": "system", "content": full_context},
+                            {"role": "system", "content": brand_context},
                             {"role": "user", "content": prompt}
                         ],
-                        max_tokens=2000
+                        max_tokens=1500
                     )
                     return response.choices[0].message.content
                 except Exception as e:
@@ -250,6 +156,49 @@ class SVDiscordBot(commands.Bot):
         except Exception as e:
             logger.error(f"AI response error: {e}")
             return f"❌ Error: {str(e)}"
+    
+    def _add_to_knowledge_base(self, title: str, content: str, source_type: str = "manual"):
+        """Add information to simple knowledge base"""
+        try:
+            self.knowledge_base["manual_entries"][title] = {
+                "content": content,
+                "type": source_type,
+                "added_at": ""
+            }
+            logger.info(f"Added to knowledge base: {title}")
+            return True
+        except Exception as e:
+            logger.error(f"Error adding to knowledge base: {e}")
+            return False
+    
+    def _search_knowledge_base(self, query: str) -> str:
+        """Simple search through knowledge base"""
+        try:
+            query_lower = query.lower()
+            relevant_info = []
+            
+            # Search company info
+            for key, value in self.knowledge_base["company_info"].items():
+                if isinstance(value, str) and query_lower in value.lower():
+                    relevant_info.append(f"{key}: {value}")
+                elif isinstance(value, list):
+                    for item in value:
+                        if query_lower in item.lower():
+                            relevant_info.append(f"{key}: {item}")
+            
+            # Search manual entries
+            for title, entry in self.knowledge_base["manual_entries"].items():
+                if query_lower in title.lower() or query_lower in entry["content"].lower():
+                    relevant_info.append(f"{title}: {entry['content'][:200]}...")
+            
+            if relevant_info:
+                return "Relevant STAFFVIRTUAL information:\n" + "\n".join(relevant_info[:3])
+            else:
+                return "No specific information found in knowledge base."
+                
+        except Exception as e:
+            logger.error(f"Knowledge search error: {e}")
+            return "Error searching knowledge base."
         
     async def setup_hook(self):
         """Called when the bot is starting up"""
@@ -289,7 +238,7 @@ async def test_command(interaction: discord.Interaction):
             color=bot.brand_config['primary_color']
         )
         embed.add_field(name="🤖 AI Services", value=f"Available: {', '.join(available_services) if available_services else 'None configured'}", inline=False)
-        embed.add_field(name="🧠 Knowledge Base", value="Ready to learn from URLs and documents", inline=False)
+        embed.add_field(name="🧠 Knowledge Base", value="Ready for manual information entry", inline=False)
         embed.add_field(name="🎨 Brand Colors", value=f"Primary: #{bot.brand_config['primary_color']:06x}", inline=False)
         
         await interaction.response.send_message(embed=embed)
@@ -297,59 +246,60 @@ async def test_command(interaction: discord.Interaction):
         logger.error(f"Test command error: {e}")
         await interaction.response.send_message(f"❌ Test failed: {str(e)}")
 
-# 🍌 NANO BANANA IMAGE GENERATOR (Using official Gemini API)
-@bot.tree.command(name="image", description="Generate actual images using Gemini 2.5 Flash (Nano Banana)")
+# 🎨 IMAGE CONCEPT GENERATOR
+@bot.tree.command(name="image", description="Generate detailed image concepts for STAFFVIRTUAL")
 async def generate_image(interaction: discord.Interaction, prompt: str, style: str = "professional"):
-    """Generate actual images using Nano Banana approach"""
+    """Generate branded image concepts"""
     await interaction.response.defer(thinking=True)
     
     try:
-        # Generate image using Nano Banana approach
-        result = await bot._generate_nano_banana_image(prompt, style)
+        system_context = "You are an expert image generation specialist. Create detailed, branded visual concepts with specific composition, color, and style guidance for professional use."
         
-        if result['success']:
-            embed = discord.Embed(
-                title="🍌 Nano Banana Image Generated!",
-                description=f"**Prompt:** {prompt}\n**Style:** {style}\n**Model:** {result['model']}",
-                color=bot.brand_config['primary_color']
-            )
-            
-            embed.add_field(
-                name="🎨 Generated Description",
-                value=result['description'][:1024],
-                inline=False
-            )
-            
-            embed.add_field(
-                name="🔧 Technical Details",
-                value=f"Model: Gemini 2.5 Flash Image Preview\nApproach: Official Nano Banana API\nBrand Colors: Integrated",
-                inline=False
-            )
-            
-            # If we have an actual image file, attach it
-            if result.get('image_path'):
-                file = discord.File(result['image_path'], filename=f"staffvirtual_{prompt.replace(' ', '_')[:20]}.png")
-                await interaction.followup.send(embed=embed, file=file)
-                
-                # Clean up temporary file
-                try:
-                    os.unlink(result['image_path'])
-                except:
-                    pass
-            else:
-                await interaction.followup.send(embed=embed)
-            
+        enhanced_prompt = f"""
+        Create a detailed image concept for STAFFVIRTUAL (virtual staffing company):
+        
+        Subject: {prompt}
+        Style: {style}, modern, clean, professional
+        Brand Colors: Use blue (#1888FF), off-white (#F8F8EB), and dark blue (#004B8D)
+        
+        Provide specific details about:
+        - Composition and layout
+        - Lighting and mood
+        - Color scheme and brand integration
+        - Typography or text elements (if any)
+        - Overall aesthetic and professional quality
+        
+        Make it suitable for business use and brand consistency.
+        """
+        
+        result = await bot._get_ai_response(enhanced_prompt, system_context)
+        
+        embed = discord.Embed(
+            title="🎨 STAFFVIRTUAL Image Concept",
+            description=f"**Prompt:** {prompt}\n**Style:** {style}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Split long responses
+        if len(result) > 1024:
+            embed.add_field(name="🖼️ Concept (Part 1)", value=result[:1024], inline=False)
+            if len(result) > 1024:
+                embed.add_field(name="🖼️ Concept (Part 2)", value=result[1024:2048], inline=False)
         else:
-            embed = discord.Embed(
-                title="❌ Image Generation Failed",
-                description=f"Error: {result.get('error', 'Unknown error')}",
-                color=0xff0000
-            )
-            await interaction.followup.send(embed=embed)
+            embed.add_field(name="🖼️ Detailed Concept", value=result, inline=False)
         
+        embed.add_field(
+            name="💡 Next Steps", 
+            value="Use this detailed concept with:\n• DALL-E 3\n• Midjourney\n• Stable Diffusion\n• Adobe Firefly\n• Or any image generation tool", 
+            inline=False
+        )
+        
+        embed.set_footer(text="Concept optimized for STAFFVIRTUAL brand consistency")
+        
+        await interaction.followup.send(embed=embed)
     except Exception as e:
-        logger.error(f"Image generation error: {e}")
-        await interaction.followup.send(f"❌ Error generating image: {str(e)}")
+        logger.error(f"Image command error: {e}")
+        await interaction.followup.send(f"❌ Error generating image concept: {str(e)}")
 
 # 📄 DOCUMENT CREATION AGENT
 @bot.tree.command(name="document", description="Create branded documents")
@@ -358,21 +308,33 @@ async def create_document(interaction: discord.Interaction, document_type: str, 
     await interaction.response.defer(thinking=True)
     
     try:
-        system_context = "You are a professional document creation specialist. Create well-structured, branded documents with proper formatting."
-        doc_prompt = f"Create a {length} {document_type} for STAFFVIRTUAL about: {topic}. Include proper structure, brand voice, and actionable content."
+        system_context = "You are a professional document creation specialist for STAFFVIRTUAL. Create well-structured, branded documents with proper formatting and professional presentation."
+        
+        doc_prompt = f"""
+        Create a {length} {document_type} for STAFFVIRTUAL about: {topic}
+        
+        Include:
+        - Professional structure and formatting
+        - STAFFVIRTUAL brand voice and messaging
+        - Actionable content and clear next steps
+        - Appropriate tone for business audience
+        - Call-to-action where relevant
+        
+        Make it comprehensive and ready for business use.
+        """
         
         result = await bot._get_ai_response(doc_prompt, system_context)
         
         embed = discord.Embed(
-            title="📄 Document Created!",
+            title="📄 STAFFVIRTUAL Document Created!",
             description=f"**Type:** {document_type}\n**Topic:** {topic}\n**Length:** {length}",
             color=bot.brand_config['primary_color']
         )
         
-        # Create file
+        # Create downloadable file
         document_content = f"# STAFFVIRTUAL {document_type.title()}: {topic}\n\n{result}"
         file_buffer = io.BytesIO(document_content.encode('utf-8'))
-        file = discord.File(file_buffer, filename=f"staffvirtual_{document_type}_{topic.replace(' ', '_')}.txt")
+        file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_{document_type}_{topic.replace(' ', '_')}.txt")
         
         preview = result[:500] + "..." if len(result) > 500 else result
         embed.add_field(name="📋 Document Preview", value=preview, inline=False)
@@ -383,17 +345,36 @@ async def create_document(interaction: discord.Interaction, document_type: str, 
         await interaction.followup.send(f"❌ Error creating document: {str(e)}")
 
 # 🏢 BRAND STRATEGY AGENT
-@bot.tree.command(name="brand", description="Get strategic brand guidance")
+@bot.tree.command(name="brand", description="Get strategic brand guidance for STAFFVIRTUAL")
 async def brand_guidance(interaction: discord.Interaction, query: str):
     """Get brand strategy guidance"""
     await interaction.response.defer(thinking=True)
     
     try:
-        system_context = "You are a senior brand strategist for STAFFVIRTUAL. Provide strategic guidance, creative direction, and actionable recommendations."
-        result = await bot._get_ai_response(query, system_context)
+        system_context = "You are a senior brand strategist and consultant for STAFFVIRTUAL. Provide strategic brand guidance, creative direction, and actionable recommendations."
+        
+        # Include knowledge base context
+        knowledge_context = bot._search_knowledge_base(query)
+        
+        brand_prompt = f"""
+        As a brand strategist for STAFFVIRTUAL, provide guidance on: {query}
+        
+        {knowledge_context}
+        
+        Please provide:
+        - Strategic recommendations
+        - Brand alignment considerations  
+        - Practical implementation steps
+        - Potential risks or considerations
+        - Next steps or action items
+        
+        Keep the response actionable and specific to STAFFVIRTUAL's brand identity.
+        """
+        
+        result = await bot._get_ai_response(brand_prompt, system_context)
         
         embed = discord.Embed(
-            title="🏢 Brand Strategic Guidance",
+            title="🏢 STAFFVIRTUAL Brand Guidance",
             description=f"**Query:** {query}",
             color=bot.brand_config['primary_color']
         )
@@ -401,15 +382,15 @@ async def brand_guidance(interaction: discord.Interaction, query: str):
         if len(result) > 1024:
             chunks = [result[i:i+1024] for i in range(0, len(result), 1024)]
             for i, chunk in enumerate(chunks[:3]):
-                field_name = "📋 Guidance" if i == 0 else f"📋 Continued ({i+1})"
+                field_name = "📋 Strategic Guidance" if i == 0 else f"📋 Continued ({i+1})"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(name="📋 Brand Guidance", value=result, inline=False)
+            embed.add_field(name="📋 Strategic Guidance", value=result, inline=False)
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f"Brand command error: {e}")
-        await interaction.followup.send(f"❌ Error: {str(e)}")
+        await interaction.followup.send(f"❌ Error generating brand guidance: {str(e)}")
 
 # 🤔 BUSINESS Q&A AGENT
 @bot.tree.command(name="ask", description="Ask questions about STAFFVIRTUAL")
@@ -419,10 +400,22 @@ async def ask_business(interaction: discord.Interaction, question: str):
     
     try:
         system_context = "You are a business intelligence assistant with deep knowledge about STAFFVIRTUAL's services, processes, and operations."
-        result = await bot._get_ai_response(question, system_context, use_knowledge=True)
+        
+        # Get relevant knowledge
+        knowledge_context = bot._search_knowledge_base(question)
+        
+        knowledge_prompt = f"""
+        Answer this question about STAFFVIRTUAL: {question}
+        
+        {knowledge_context}
+        
+        Provide a helpful, accurate response based on available information. If specific details aren't available, provide general guidance and suggest where to find more information.
+        """
+        
+        result = await bot._get_ai_response(knowledge_prompt, system_context)
         
         embed = discord.Embed(
-            title="🤔 Business Question Answered",
+            title="🤔 STAFFVIRTUAL Business Q&A",
             description=f"**Question:** {question}",
             color=bot.brand_config['primary_color']
         )
@@ -435,22 +428,66 @@ async def ask_business(interaction: discord.Interaction, question: str):
         else:
             embed.add_field(name="💡 Answer", value=result, inline=False)
         
+        embed.set_footer(text="💡 For specific company policies, consult internal documentation")
+        
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f"Ask command error: {e}")
-        await interaction.followup.send(f"❌ Error: {str(e)}")
+        await interaction.followup.send(f"❌ Error processing question: {str(e)}")
 
-# 🌐 URL LEARNING AGENT
-@bot.tree.command(name="learn_url", description="Learn from website content")
-async def learn_from_url(interaction: discord.Interaction, url: str):
-    """Learn from URLs"""
+# 📝 ADD INFORMATION TO KNOWLEDGE BASE
+@bot.tree.command(name="add_info", description="Add information to STAFFVIRTUAL knowledge base")
+async def add_info(interaction: discord.Interaction, title: str, content: str):
+    """Add text information to knowledge base"""
     await interaction.response.defer(thinking=True)
     
     try:
-        content = await bot.knowledge_manager.scrape_url(url)
+        success = bot._add_to_knowledge_base(title, content)
         
-        if content and not content.get('error'):
-            bot.knowledge_manager.save_knowledge_base()
+        if success:
+            embed = discord.Embed(
+                title="📝 Information Added to Knowledge Base!",
+                description=f"**Title:** {title}",
+                color=bot.brand_config['primary_color']
+            )
+            
+            embed.add_field(name="📄 Content Added", value=content[:800] + "..." if len(content) > 800 else content, inline=False)
+            embed.set_footer(text="This information is now available for all AI agents to reference")
+            
+        else:
+            embed = discord.Embed(
+                title="❌ Failed to Add Information",
+                description="Could not add information to knowledge base",
+                color=0xff0000
+            )
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Add info error: {e}")
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🌐 SIMPLE WEB LEARNING
+@bot.tree.command(name="learn_url", description="Learn basic information from a website")
+async def learn_from_url(interaction: discord.Interaction, url: str):
+    """Learn from URLs with simple scraping"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        # Simple web scraping
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract basic content
+            title = soup.find('title').text.strip() if soup.find('title') else "No title"
+            paragraphs = [p.text.strip() for p in soup.find_all('p') if p.text.strip() and len(p.text.strip()) > 20]
+            
+            # Store in knowledge base
+            content_summary = "\n".join(paragraphs[:5])  # First 5 paragraphs
+            bot._add_to_knowledge_base(f"Website: {title}", content_summary, "url")
             
             embed = discord.Embed(
                 title="🌐 Website Content Learned!",
@@ -458,76 +495,36 @@ async def learn_from_url(interaction: discord.Interaction, url: str):
                 color=bot.brand_config['primary_color']
             )
             
-            embed.add_field(name="📄 Page Title", value=content.get('title', 'No title')[:500], inline=False)
-            embed.add_field(
-                name="📊 Content Stats",
-                value=f"Paragraphs: {len(content.get('paragraphs', []))}\nContent learned and available for all AI agents",
-                inline=False
-            )
-            embed.set_footer(text="This information is now available for all AI agents to reference")
+            embed.add_field(name="📄 Page Title", value=title[:500], inline=False)
+            embed.add_field(name="📊 Content Stats", value=f"Paragraphs extracted: {len(paragraphs)}", inline=False)
+            
+            if content_summary:
+                preview = content_summary[:500] + "..." if len(content_summary) > 500 else content_summary
+                embed.add_field(name="📝 Content Preview", value=preview, inline=False)
+            
+            embed.set_footer(text="This information is now available for all AI agents")
             
         else:
             embed = discord.Embed(
                 title="❌ Failed to Learn from URL",
-                description=f"Could not scrape content from: {url}",
+                description=f"Could not access: {url} (Status: {response.status_code})",
                 color=0xff0000
             )
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
         logger.error(f"Learn URL error: {e}")
-        await interaction.followup.send(f"❌ Error: {str(e)}")
-
-# 📄 SIMPLE DOCUMENT UPLOAD (Text-based for now)
-@bot.tree.command(name="add_info", description="Add text information to knowledge base")
-async def add_info(interaction: discord.Interaction, title: str, content: str):
-    """Add text information directly to knowledge base"""
-    await interaction.response.defer(thinking=True)
-    
-    try:
-        # Add to knowledge base directly
-        info_entry = {
-            "title": title,
-            "content": content,
-            "type": "manual",
-            "added_by": str(interaction.user),
-            "added_at": ""
-        }
-        
-        if "manual_entries" not in bot.knowledge_manager.knowledge_base:
-            bot.knowledge_manager.knowledge_base["manual_entries"] = {}
-        
-        bot.knowledge_manager.knowledge_base["manual_entries"][title] = info_entry
-        bot.knowledge_manager.knowledge_base["sources"].append({
-            "type": "manual",
-            "source": title,
-            "title": title
-        })
-        
-        bot.knowledge_manager.save_knowledge_base()
-        
-        embed = discord.Embed(
-            title="📝 Information Added!",
-            description=f"**Title:** {title}",
-            color=bot.brand_config['primary_color']
-        )
-        
-        embed.add_field(name="📄 Content Added", value=content[:500] + "..." if len(content) > 500 else content, inline=False)
-        embed.set_footer(text="This information is now available for all AI agents to reference")
-        
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        logger.error(f"Add info error: {e}")
-        await interaction.followup.send(f"❌ Error: {str(e)}")
+        await interaction.followup.send(f"❌ Error learning from URL: {str(e)}")
 
 # 🧠 KNOWLEDGE STATUS
-@bot.tree.command(name="knowledge_status", description="Check knowledge base status")
+@bot.tree.command(name="knowledge_status", description="Check STAFFVIRTUAL knowledge base status")
 async def knowledge_status(interaction: discord.Interaction):
     """Show knowledge base status"""
     await interaction.response.defer(thinking=True)
     
     try:
-        summary = bot.knowledge_manager.get_knowledge_summary()
+        manual_entries = len(bot.knowledge_base["manual_entries"])
+        scraped_content = len(bot.knowledge_base["scraped_content"])
         
         embed = discord.Embed(
             title="🧠 STAFFVIRTUAL Knowledge Base",
@@ -537,25 +534,22 @@ async def knowledge_status(interaction: discord.Interaction):
         
         embed.add_field(
             name="📊 Statistics",
-            value=f"Scraped URLs: {summary['scraped_urls']}\nUploaded Documents: {summary['uploaded_documents']}\nTotal Sources: {summary['total_sources']}",
+            value=f"Manual Entries: {manual_entries}\nScraped Content: {scraped_content}\nTotal Sources: {manual_entries + scraped_content}",
             inline=False
         )
         
-        sources = bot.knowledge_manager.knowledge_base.get('sources', [])
-        if sources:
-            source_list = []
-            for source in sources[-5:]:  # Show last 5 sources
-                source_list.append(f"• {source['type'].title()}: {source['title'][:40]}...")
-            
+        # Show recent entries
+        if bot.knowledge_base["manual_entries"]:
+            recent_entries = list(bot.knowledge_base["manual_entries"].keys())[-3:]
             embed.add_field(
-                name="📚 Recent Sources",
-                value="\n".join(source_list),
+                name="📚 Recent Entries",
+                value="\n".join([f"• {entry}" for entry in recent_entries]),
                 inline=False
             )
         
         embed.add_field(
             name="💡 How to Add Knowledge",
-            value="• `/learn_url` - Learn from websites\n• `/add_info` - Add text information manually\n• Upload docs as text files for now",
+            value="• `/add_info` - Add text information manually\n• `/learn_url` - Learn from websites",
             inline=False
         )
         
@@ -565,35 +559,37 @@ async def knowledge_status(interaction: discord.Interaction):
         await interaction.followup.send(f"❌ Error: {str(e)}")
 
 # ❓ HELP COMMAND
-@bot.tree.command(name="help", description="Show all available commands")
+@bot.tree.command(name="help", description="Show all available STAFFVIRTUAL bot commands")
 async def help_command(interaction: discord.Interaction):
     """Show help information"""
     try:
         embed = discord.Embed(
             title="🤖 STAFFVIRTUAL Brand Assistant",
-            description="AI-powered creative companion with Nano Banana image generation",
+            description="AI-powered creative companion for professional content creation",
             color=bot.brand_config['primary_color']
         )
         
-        embed.add_field(name="🍌 /image", value="Generate images (Nano Banana)", inline=True)
-        embed.add_field(name="📄 /document", value="Create documents", inline=True)
-        embed.add_field(name="🏢 /brand", value="Brand guidance", inline=True)
-        embed.add_field(name="🤔 /ask", value="Business questions", inline=True)
+        embed.add_field(name="🎨 /image", value="Generate detailed image concepts", inline=True)
+        embed.add_field(name="📄 /document", value="Create branded documents", inline=True)
+        embed.add_field(name="🏢 /brand", value="Get brand guidance", inline=True)
+        embed.add_field(name="🤔 /ask", value="Ask business questions", inline=True)
         embed.add_field(name="🌐 /learn_url", value="Learn from websites", inline=True)
-        embed.add_field(name="📝 /add_info", value="Add text information", inline=True)
-        embed.add_field(name="🧠 /knowledge_status", value="Check knowledge", inline=True)
-        embed.add_field(name="🧪 /test", value="Test functionality", inline=True)
+        embed.add_field(name="📝 /add_info", value="Add information manually", inline=True)
+        embed.add_field(name="🧠 /knowledge_status", value="Check knowledge base", inline=True)
+        embed.add_field(name="🧪 /test", value="Test bot functionality", inline=True)
         
         embed.add_field(
-            name="🚀 Features",
-            value="• Nano Banana image generation\n• Smart knowledge base\n• Brand-consistent responses\n• Document processing",
+            name="🚀 STAFFVIRTUAL Features",
+            value="• Professional brand consistency\n• Smart knowledge base\n• Document generation\n• Strategic guidance",
             inline=False
         )
+        
+        embed.set_footer(text="All responses optimized for STAFFVIRTUAL brand consistency")
         
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         logger.error(f"Help command error: {e}")
-        await interaction.response.send_message(f"❌ Error: {str(e)}")
+        await interaction.response.send_message(f"❌ Error showing help: {str(e)}")
 
 # Run the bot
 if __name__ == "__main__":
@@ -603,7 +599,7 @@ if __name__ == "__main__":
         exit(1)
     
     try:
-        logger.info("Starting STAFFVIRTUAL Discord Bot with Nano Banana...")
+        logger.info("Starting STAFFVIRTUAL Discord Bot...")
         bot.run(token)
     except Exception as e:
         logger.error(f"Failed to start bot: {e}")

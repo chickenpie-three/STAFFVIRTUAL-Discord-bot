@@ -558,6 +558,202 @@ async def knowledge_status(interaction: discord.Interaction):
         logger.error(f"Knowledge status error: {e}")
         await interaction.followup.send(f"❌ Error: {str(e)}")
 
+# 📝 BLOG CREATION AGENT
+@bot.tree.command(name="blog", description="Create SEO-optimized blog posts for STAFFVIRTUAL")
+async def create_blog(interaction: discord.Interaction, topic: str, keywords: str = "", length: str = "medium"):
+    """Create blog posts"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        system_context = "You are a professional blog writer and content strategist for STAFFVIRTUAL. Create engaging, SEO-optimized blog posts that establish thought leadership."
+        
+        blog_prompt = f"""
+        Write a {length} blog post for STAFFVIRTUAL about: {topic}
+        Target Keywords: {keywords if keywords else 'virtual assistants, remote work, business efficiency'}
+        
+        Include:
+        - SEO-optimized title and structure
+        - Engaging introduction
+        - Clear headings and subheadings
+        - Valuable, informative content
+        - Call-to-action at the end
+        - STAFFVIRTUAL brand voice and expertise
+        
+        Make it professional and suitable for business blog publication.
+        """
+        
+        result = await bot._get_ai_response(blog_prompt, system_context)
+        
+        embed = discord.Embed(
+            title="📝 STAFFVIRTUAL Blog Post Created!",
+            description=f"**Topic:** {topic}\n**Keywords:** {keywords or 'General'}\n**Length:** {length}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create downloadable file
+        blog_content = f"# STAFFVIRTUAL Blog Post: {topic}\n\n{result}"
+        file_buffer = io.BytesIO(blog_content.encode('utf-8'))
+        file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_blog_{topic.replace(' ', '_')}.md")
+        
+        preview = result[:600] + "..." if len(result) > 600 else result
+        embed.add_field(name="📋 Blog Preview", value=preview, inline=False)
+        
+        await interaction.followup.send(embed=embed, file=file)
+    except Exception as e:
+        logger.error(f"Blog command error: {e}")
+        await interaction.followup.send(f"❌ Error creating blog post: {str(e)}")
+
+# 📱 SOCIAL MEDIA AGENT
+@bot.tree.command(name="social", description="Create platform-specific social media posts")
+async def create_social(interaction: discord.Interaction, platform: str, topic: str, hashtags: str = ""):
+    """Create social media posts"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        system_context = "You are a social media content specialist for STAFFVIRTUAL. Create platform-specific, engaging content that drives engagement and conversions."
+        
+        social_prompt = f"""
+        Create a social media post for {platform} about: {topic}
+        
+        Platform: {platform}
+        Brand: STAFFVIRTUAL (virtual staffing company)
+        Hashtags to include: {hashtags if hashtags else 'relevant industry hashtags'}
+        
+        Platform-specific optimization:
+        - LinkedIn: Professional, thought leadership tone
+        - Instagram: Visual, engaging, story-driven
+        - Twitter/X: Concise, impactful, conversation-starting
+        - Facebook: Community-focused, engaging
+        - TikTok: Trendy, authentic, entertaining
+        
+        Include relevant hashtags and engagement hooks. Maintain STAFFVIRTUAL's professional brand voice.
+        """
+        
+        result = await bot._get_ai_response(social_prompt, system_context)
+        
+        embed = discord.Embed(
+            title="📱 STAFFVIRTUAL Social Media Post!",
+            description=f"**Platform:** {platform.title()}\n**Topic:** {topic}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        embed.add_field(name=f"📝 {platform.title()} Post", value=result, inline=False)
+        
+        if hashtags:
+            embed.add_field(name="🏷️ Requested Hashtags", value=hashtags, inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Social command error: {e}")
+        await interaction.followup.send(f"❌ Error creating social media post: {str(e)}")
+
+# 📅 CONTENT CALENDAR AGENT
+@bot.tree.command(name="calendar", description="Generate social media content calendars")
+async def create_calendar(interaction: discord.Interaction, duration: str = "1 month", focus: str = "general"):
+    """Create content calendars"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        system_context = "You are a social media strategist and calendar planner for STAFFVIRTUAL. Create comprehensive content calendars that support business goals and audience engagement."
+        
+        calendar_prompt = f"""
+        Create a social media content calendar for STAFFVIRTUAL:
+        
+        Duration: {duration}
+        Focus Area: {focus}
+        
+        Requirements:
+        1. Plan content for major platforms (LinkedIn, Instagram, Twitter/X)
+        2. Balance content types: educational, promotional, behind-the-scenes, industry insights
+        3. Include optimal posting times and frequencies
+        4. Suggest content themes for each week
+        5. Include relevant hashtags and engagement strategies
+        6. Consider STAFFVIRTUAL's business goals and target audience
+        
+        Provide a structured calendar with specific post ideas and scheduling recommendations.
+        """
+        
+        result = await bot._get_ai_response(calendar_prompt, system_context)
+        
+        embed = discord.Embed(
+            title="📅 STAFFVIRTUAL Content Calendar!",
+            description=f"**Duration:** {duration}\n**Focus:** {focus}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Create downloadable file
+        calendar_content = f"# STAFFVIRTUAL Social Media Calendar - {duration}\n## Focus: {focus}\n\n{result}"
+        file_buffer = io.BytesIO(calendar_content.encode('utf-8'))
+        file = discord.File(file_buffer, filename=f"STAFFVIRTUAL_calendar_{duration.replace(' ', '_')}.md")
+        
+        preview = result[:600] + "..." if len(result) > 600 else result
+        embed.add_field(name="📋 Calendar Preview", value=preview, inline=False)
+        
+        await interaction.followup.send(embed=embed, file=file)
+    except Exception as e:
+        logger.error(f"Calendar command error: {e}")
+        await interaction.followup.send(f"❌ Error creating calendar: {str(e)}")
+
+# 🎬 VIDEO STRATEGY AGENT
+@bot.tree.command(name="video", description="Generate video content strategies")
+async def generate_video(interaction: discord.Interaction, prompt: str, duration: int = 30, style: str = "professional"):
+    """Generate video content strategies"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        system_context = "You are a video content creation specialist for STAFFVIRTUAL. Develop compelling video concepts and strategies that align with brand guidelines."
+        
+        video_prompt = f"""
+        Create a comprehensive video content strategy for STAFFVIRTUAL:
+        
+        Video Concept: {prompt}
+        Duration: {duration} seconds
+        Style: {style}
+        
+        Brand Guidelines:
+        - Professional, modern, trustworthy
+        - Colors: Blue (#1888FF), off-white (#F8F8EB), dark blue (#004B8D)
+        - Voice: Professional yet approachable
+        
+        Please provide:
+        1. Video concept and narrative structure
+        2. Visual style recommendations
+        3. Script outline or key talking points
+        4. Technical specifications and requirements
+        5. Brand integration suggestions
+        6. Call-to-action recommendations
+        
+        Focus on creating content that showcases STAFFVIRTUAL's expertise and engages the target audience.
+        """
+        
+        result = await bot._get_ai_response(video_prompt, system_context)
+        
+        embed = discord.Embed(
+            title="🎬 STAFFVIRTUAL Video Strategy!",
+            description=f"**Concept:** {prompt}\n**Duration:** {duration}s\n**Style:** {style}",
+            color=bot.brand_config['primary_color']
+        )
+        
+        # Split long responses
+        if len(result) > 1024:
+            chunks = [result[i:i+1024] for i in range(0, len(result), 1024)]
+            for i, chunk in enumerate(chunks[:3]):
+                field_name = "🎯 Video Strategy" if i == 0 else f"🎯 Continued ({i+1})"
+                embed.add_field(name=field_name, value=chunk, inline=False)
+        else:
+            embed.add_field(name="🎯 Video Strategy", value=result, inline=False)
+        
+        embed.add_field(
+            name="🛠️ Next Steps",
+            value="Use this strategy with video creation tools like:\n• Luma AI\n• Runway ML\n• Adobe Premiere\n• Canva Video",
+            inline=False
+        )
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Video command error: {e}")
+        await interaction.followup.send(f"❌ Error generating video strategy: {str(e)}")
+
 # ❓ HELP COMMAND
 @bot.tree.command(name="help", description="Show all available STAFFVIRTUAL bot commands")
 async def help_command(interaction: discord.Interaction):
@@ -569,18 +765,22 @@ async def help_command(interaction: discord.Interaction):
             color=bot.brand_config['primary_color']
         )
         
-        embed.add_field(name="🎨 /image", value="Generate detailed image concepts", inline=True)
-        embed.add_field(name="📄 /document", value="Create branded documents", inline=True)
-        embed.add_field(name="🏢 /brand", value="Get brand guidance", inline=True)
-        embed.add_field(name="🤔 /ask", value="Ask business questions", inline=True)
+        embed.add_field(name="🎨 /image", value="Generate image concepts", inline=True)
+        embed.add_field(name="📄 /document", value="Create documents", inline=True)
+        embed.add_field(name="🏢 /brand", value="Brand guidance", inline=True)
+        embed.add_field(name="🎬 /video", value="Video strategies", inline=True)
+        embed.add_field(name="📝 /blog", value="Create blog posts", inline=True)
+        embed.add_field(name="📱 /social", value="Social media posts", inline=True)
+        embed.add_field(name="📅 /calendar", value="Content calendars", inline=True)
+        embed.add_field(name="🤔 /ask", value="Business questions", inline=True)
         embed.add_field(name="🌐 /learn_url", value="Learn from websites", inline=True)
-        embed.add_field(name="📝 /add_info", value="Add information manually", inline=True)
-        embed.add_field(name="🧠 /knowledge_status", value="Check knowledge base", inline=True)
-        embed.add_field(name="🧪 /test", value="Test bot functionality", inline=True)
+        embed.add_field(name="📝 /add_info", value="Add information", inline=True)
+        embed.add_field(name="🧠 /knowledge_status", value="Check knowledge", inline=True)
+        embed.add_field(name="🧪 /test", value="Test functionality", inline=True)
         
         embed.add_field(
             name="🚀 STAFFVIRTUAL Features",
-            value="• Professional brand consistency\n• Smart knowledge base\n• Document generation\n• Strategic guidance",
+            value="• 12 specialized AI agents\n• Smart knowledge base\n• Professional content creation\n• Brand-consistent responses",
             inline=False
         )
         

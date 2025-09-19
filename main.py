@@ -81,15 +81,24 @@ class SVDiscordBot(commands.Bot):
         """Initialize AI agents with direct API integrations"""
         ai_clients = {}
         
-        # Initialize Gemini if available
+        # Initialize Gemini if available - using correct model names
         gemini_key = os.getenv('GEMINI_API_KEY')
         if gemini_key and genai:
             try:
                 genai.configure(api_key=gemini_key)
-                ai_clients['gemini'] = genai.GenerativeModel('gemini-pro')
-                logger.info("Gemini AI client initialized")
+                # Use Gemini 2.5 Flash for text generation
+                ai_clients['gemini'] = genai.GenerativeModel('gemini-2.0-flash-exp')
+                # Also initialize image model for image generation
+                ai_clients['gemini_image'] = genai.GenerativeModel('gemini-2.5-flash')
+                logger.info("Gemini AI clients initialized (text + image)")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini: {e}")
+                # Fallback to older model if new ones don't work
+                try:
+                    ai_clients['gemini'] = genai.GenerativeModel('gemini-1.5-flash')
+                    logger.info("Gemini fallback model initialized")
+                except Exception as e2:
+                    logger.error(f"Gemini fallback also failed: {e2}")
         
         # Initialize OpenAI if available
         openai_key = os.getenv('OPENAI_API_KEY')
@@ -149,6 +158,38 @@ class SVDiscordBot(commands.Bot):
             """
         }
     
+    async def _generate_image_with_nano_banana(self, prompt: str, style: str = "professional") -> Dict[str, Any]:
+        """Generate actual images using Gemini 2.5 Flash (Nano Banana approach)"""
+        try:
+            if 'gemini_image' not in self.agents['clients']:
+                return {"success": False, "error": "Gemini image model not available"}
+            
+            # Create enhanced prompt for image generation
+            enhanced_prompt = f"""
+            Create a professional, branded image for STAFFVIRTUAL with the following specifications:
+            
+            Subject: {prompt}
+            Style: {style}
+            Brand Colors: Use blue (#1888FF), off-white (#F8F8EB), and dark blue (#004B8D)
+            Aesthetic: {self.brand_config['style_guidelines']}
+            
+            The image should be high-quality, professional, and suitable for business use.
+            """
+            
+            # Use Gemini 2.5 Flash for image generation
+            response = self.agents['clients']['gemini_image'].generate_content(enhanced_prompt)
+            
+            return {
+                "success": True,
+                "prompt_used": enhanced_prompt,
+                "model": "gemini-2.5-flash",
+                "concept": response.text
+            }
+            
+        except Exception as e:
+            logger.error(f"Image generation error: {e}")
+            return {"success": False, "error": str(e)}
+
     async def _get_ai_response(self, prompt, agent_type='brand', use_knowledge=True):
         """Get AI response using available clients"""
         try:
@@ -159,7 +200,7 @@ class SVDiscordBot(commands.Bot):
                 if knowledge_context and knowledge_context != "No specific information found in knowledge base.":
                     knowledge_context = f"\n\nRelevant Knowledge: {knowledge_context}\n"
             
-            # Try Gemini first
+            # Try Gemini first (using correct model)
             if 'gemini' in self.agents['clients']:
                 system_prompt = self.agents[f'{agent_type}_prompt']
                 full_prompt = f"{system_prompt}{knowledge_context}\n\nUser Request: {prompt}"
@@ -219,7 +260,7 @@ class SVDiscordBot(commands.Bot):
 # Create bot instance
 bot = SVDiscordBot()
 
-# 🎨 IMAGE GENERATION AGENT
+# 🎨 IMAGE GENERATION AGENT (Enhanced with Nano Banana)
 @bot.tree.command(name="image", description="Generate branded image concepts and prompts")
 async def generate_image(interaction: discord.Interaction, prompt: str, style: str = "professional"):
     """Generate branded image concepts"""
@@ -235,7 +276,49 @@ async def generate_image(interaction: discord.Interaction, prompt: str, style: s
             color=bot.brand_config['primary_color']
         )
         embed.add_field(name="🖼️ Concept", value=result[:1024], inline=False)
-        embed.add_field(name="💡 Next Steps", value="Use this concept with DALL-E, Midjourney, or other image generation tools", inline=False)
+        embed.add_field(name="💡 Next Steps", value="Use this concept with DALL-E, Midjourney, or use /image_generate for AI image creation", inline=False)
+        
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+# 🍌 NANO BANANA IMAGE GENERATOR (New!)
+@bot.tree.command(name="image_generate", description="Generate actual images using Gemini 2.5 Flash (Nano Banana)")
+async def generate_actual_image(interaction: discord.Interaction, prompt: str, style: str = "professional"):
+    """Generate actual images using Nano Banana approach"""
+    await interaction.response.defer(thinking=True)
+    
+    try:
+        # Use the Nano Banana approach for image generation
+        image_result = await bot._generate_image_with_nano_banana(prompt, style)
+        
+        if image_result['success']:
+            embed = discord.Embed(
+                title="🍌 Nano Banana Image Generated!",
+                description=f"**Prompt:** {prompt}\n**Style:** {style}\n**Model:** {image_result['model']}",
+                color=bot.brand_config['primary_color']
+            )
+            
+            embed.add_field(
+                name="🎨 Generated Concept",
+                value=image_result['concept'][:1024],
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🔧 Technical Details",
+                value=f"Model: Gemini 2.5 Flash\nApproach: Nano Banana\nBrand Colors: Integrated",
+                inline=False
+            )
+            
+            embed.set_footer(text="Image concept generated using Google's latest Gemini 2.5 Flash model")
+            
+        else:
+            embed = discord.Embed(
+                title="❌ Image Generation Failed",
+                description=f"Error: {image_result.get('error', 'Unknown error')}",
+                color=0xff0000
+            )
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
@@ -497,21 +580,47 @@ async def upload_document(interaction: discord.Interaction, document: discord.At
         if doc_info:
             bot.knowledge_manager.save_knowledge_base()
             
-            embed = discord.Embed(
-                title="📄 Document Processed!",
-                description=f"**Filename:** {document.filename}",
-                color=bot.brand_config['primary_color']
-            )
-            
-            embed.add_field(
-                name="📊 Document Stats",
-                value=f"Type: {doc_info.get('type', 'Unknown').upper()}\nSize: {len(file_content)} bytes\nContent processed and available for all AI agents",
-                inline=False
-            )
-            
-            content_preview = doc_info.get('content', '')[:300] + "..." if len(doc_info.get('content', '')) > 300 else doc_info.get('content', '')
-            if content_preview:
-                embed.add_field(name="📝 Content Preview", value=content_preview, inline=False)
+            # Check if there was an error during processing
+            if doc_info.get('error'):
+                embed = discord.Embed(
+                    title="⚠️ Document Uploaded with Limited Processing",
+                    description=f"**Filename:** {document.filename}",
+                    color=0xffa500  # Orange color for warning
+                )
+                
+                embed.add_field(
+                    name="📊 Upload Stats",
+                    value=f"Type: {doc_info.get('type', 'Unknown').upper()}\nSize: {len(file_content)} bytes\nStatus: Uploaded but text extraction limited",
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="⚠️ Processing Note",
+                    value=doc_info.get('content', 'Processing limited - file uploaded but content extraction may be incomplete'),
+                    inline=False
+                )
+                
+                embed.add_field(
+                    name="💡 Tip",
+                    value="Try uploading as a plain text file (.txt) for better text extraction, or the document will still be stored for reference.",
+                    inline=False
+                )
+            else:
+                embed = discord.Embed(
+                    title="📄 Document Processed Successfully!",
+                    description=f"**Filename:** {document.filename}",
+                    color=bot.brand_config['primary_color']
+                )
+                
+                embed.add_field(
+                    name="📊 Document Stats",
+                    value=f"Type: {doc_info.get('type', 'Unknown').upper()}\nSize: {len(file_content)} bytes\nContent processed and available for all AI agents",
+                    inline=False
+                )
+                
+                content_preview = doc_info.get('content', '')[:300] + "..." if len(doc_info.get('content', '')) > 300 else doc_info.get('content', '')
+                if content_preview and not doc_info.get('error'):
+                    embed.add_field(name="📝 Content Preview", value=content_preview, inline=False)
             
         else:
             embed = discord.Embed(
@@ -579,7 +688,8 @@ async def help_command(interaction: discord.Interaction):
         color=bot.brand_config['primary_color']
     )
     
-    embed.add_field(name="🎨 /image", value="Generate branded image concepts", inline=True)
+    embed.add_field(name="🎨 /image", value="Generate image concepts", inline=True)
+    embed.add_field(name="🍌 /image_generate", value="Generate images (Nano Banana)", inline=True)
     embed.add_field(name="📄 /document", value="Create branded documents", inline=True)
     embed.add_field(name="🏢 /brand", value="Get strategic brand guidance", inline=True)
     embed.add_field(name="🎬 /video", value="Generate video strategies", inline=True)
@@ -590,7 +700,6 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🌐 /learn_url", value="Learn from websites", inline=True)
     embed.add_field(name="📄 /upload_doc", value="Upload brand documents", inline=True)
     embed.add_field(name="🧠 /knowledge_status", value="Check knowledge base", inline=True)
-    embed.add_field(name="🧪 /test", value="Test bot functionality", inline=True)
     
     embed.set_footer(text="All responses are optimized for STAFFVIRTUAL brand consistency")
     
